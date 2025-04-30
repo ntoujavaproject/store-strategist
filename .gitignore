@@ -1,0 +1,25 @@
+# 編譯產生的 class 檔
+*.class
+
+# log 檔
+*.log
+
+# 打包檔案
+*.jar
+*.war
+*.ear
+
+# IDE 設定資料夾
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+
+# Maven / Gradle 輸出
+target/
+build/
+
+# 作業系統暫存檔
+.DS_Store
+Thumbs.db
