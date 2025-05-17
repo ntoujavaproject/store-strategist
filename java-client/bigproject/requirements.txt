@@ -1,0 +1,7 @@
+Flask>=2.0
+requests
+beautifulsoup4
+emoji
+datetime
+Pillow
+org.json 

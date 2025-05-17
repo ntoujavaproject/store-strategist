@@ -1,0 +1,463 @@
+/* bigproject/modern_dark_theme.css */
+
+.root {
+    -fx-base: #2E2E2E; /* 深灰色基礎色 */
+    -fx-background: #1F1F1F; /* 更深的背景色 */
+    -fx-control-inner-background: #3A3A3A; /* 控制項內部背景，如 TextArea */
+    -fx-control-inner-background-alt: derive(-fx-control-inner-background, 20%); /* 控制項內部背景的替代色 */
+    -fx-accent: #FFD700; /* 亮黃色強調色 */
+    -fx-default-button: #4CAF50; /* 預設按鈕顏色 (可選) */
+    -fx-focus-color: #6B6B6B; /* 更改焦點顏色為深灰色而非透明 */
+    -fx-faint-focus-color: #4A4A4A; /* 較淡的焦點顏色 */
+    /* Use serif font as default */
+    -fx-font-family: "Serif";
+}
+
+/* 針對所有控制項優化焦點效果 */
+.text-field:focused,
+.text-area:focused,
+.button:focused,
+.toggle-button:focused,
+.combo-box:focused,
+.list-view:focused,
+.scroll-pane:focused {
+    -fx-background-insets: 0;
+    -fx-background-radius: 0;
+    -fx-border-color: #777777; /* 加深焦點邊框顏色 */
+    -fx-border-width: 1px; /* 統一邊框寬度 */
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.3), 3, 0, 0, 0); /* 輕微的陰影效果 */
+}
+
+/* 改進選中項目的高亮 */
+.list-view:focused > .virtual-flow > .clipped-container > .sheet > .list-cell:filled:selected,
+.table-view:focused > .virtual-flow > .clipped-container > .sheet > .table-row-cell:filled:selected,
+.table-view:focused > .virtual-flow > .clipped-container > .sheet > .table-row-cell > .table-cell:selected,
+.tree-view:focused > .virtual-flow > .clipped-container > .sheet > .tree-cell:filled:selected,
+.tree-table-view:focused > .virtual-flow > .clipped-container > .sheet > .tree-table-row-cell:filled:selected,
+.tree-table-view:focused > .virtual-flow > .clipped-container > .sheet > .tree-table-row-cell > .tree-table-cell:selected {
+    -fx-background: #555555; /* 使用灰色而不是黃色 */
+    -fx-text-fill: white;
+}
+
+/* 修復文本選擇顏色 */
+.text-input:focused {
+    -fx-highlight-fill: #4a4a4a; /* 文字選取背景顏色 */
+    -fx-highlight-text-fill: white; /* 被選取的文字顏色 */
+}
+
+/* --- General Text Colors --- */
+.label {
+    -fx-text-fill: #E0E0E0; /* 淺灰色文字 */
+}
+
+/* Style for Star Ratings */
+.star-rating {
+    -fx-text-fill: orange; /* Make stars orange */
+    -fx-font-size: 1.1em; /* Slightly larger stars */
+    /* Add transition for hover effect - targeting scale properties */
+    -fx-transition: -fx-scale-x 0.2s ease-in-out, -fx-scale-y 0.2s ease-in-out;
+    -fx-display: inline-block; /* Important for transform */
+    -fx-cursor: default; /* Use default cursor for non-interactive labels */
+    /* Initialize scale to 1 */
+    -fx-scale-x: 1;
+    -fx-scale-y: 1;
+}
+
+.star-rating:hover {
+    /* Scale up on hover - using JavaFX scale properties */
+    -fx-scale-x: 1.25;
+    -fx-scale-y: 1.25;
+}
+
+.label-bright { /* 用於標題等需要更亮文字的地方 */
+    -fx-text-fill: #FFFFFF;
+    -fx-font-weight: bold;
+}
+
+.text-area, .text-field, .list-view, .combo-box {
+    -fx-text-fill: #E0E0E0; /* 輸入區文字顏色 */
+    -fx-prompt-text-fill: #9E9E9E; /* 提示文字顏色 */
+    -fx-border-color: #555555; /* 邊框顏色 */
+    -fx-border-radius: 8; /* 更圓潤的邊角 */
+    -fx-background-radius: 8; /* 匹配邊框圓角 */
+    -fx-effect: innershadow(gaussian, rgba(0,0,0,0.2), 2, 0, 0, 1); /* 內陰影效果 */
+}
+
+.text-area .content {
+    -fx-background-color: -fx-control-inner-background;
+    -fx-background-radius: 8; /* 內容區域也有圓角 */
+}
+
+/* --- Bottom Search Bar (ChatGPT Style) --- */
+.bottom-bar {
+    -fx-background-color: transparent;
+    -fx-padding: 5 15 15 15; /* Reduced top padding */
+}
+
+/* Glassmorphism effect for search container */
+.search-container {
+    -fx-background-color: rgba(44, 44, 44, 0.85);
+    -fx-background-radius: 25;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.4), 10, 0, 0, 3);
+    -fx-border-color: rgba(255, 255, 255, 0.1);
+    -fx-border-width: 1;
+    -fx-border-radius: 25;
+}
+
+.bottom-bar .text-field {
+    -fx-background-color: rgba(58, 58, 58, 0.6);
+    -fx-text-fill: white;
+    -fx-prompt-text-fill: #9E9E9E;
+    -fx-background-radius: 20;
+    -fx-border-radius: 20;
+    -fx-border-color: rgba(255, 255, 255, 0.1);
+    -fx-padding: 10 15 10 15;
+    -fx-font-size: 14px;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.2), 3, 0, 0, 1);
+}
+
+.bottom-bar .button {
+    -fx-background-color: #E67649;
+    -fx-text-fill: white;
+    -fx-background-radius: 20;
+    -fx-border-radius: 20;
+    -fx-font-size: 14px;
+    -fx-padding: 10 20 10 20;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.2), 3, 0, 0, 1);
+}
+
+.bottom-bar .button:hover {
+    -fx-background-color: derive(#E67649, 10%);
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.3), 5, 0, 0, 1);
+}
+
+.bottom-bar .button:pressed {
+    -fx-background-color: derive(#E67649, -10%);
+    -fx-scale-x: 0.98;
+    -fx-scale-y: 0.98;
+}
+
+/* --- Buttons --- */
+.button, .toggle-button {
+    -fx-background-color: #424242; /* 按鈕背景色 */
+    -fx-text-fill: #FFFFFF; /* 按鈕文字顏色 */
+    /* Increased radius for more rounded buttons */
+    -fx-background-radius: 20;
+    -fx-border-radius: 20;
+    -fx-padding: 8 15 8 15;
+    -fx-cursor: hand;
+    /* Add transitions for smooth hover and press effects */
+    -fx-transition: background-color 0.2s ease-in-out, transform 0.1s ease-in-out;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.2), 2, 0, 0, 1); /* 輕微陰影效果 */
+}
+
+.button:hover, .toggle-button:hover {
+    -fx-background-color: #555555; /* 滑鼠懸停時的背景色 */
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.3), 3, 0, 0, 1); /* 懸停時增強陰影 */
+}
+
+/* Modified pressed/selected state */
+.button:pressed, .toggle-button:selected {
+    /* Darker background instead of accent color */
+    -fx-background-color: #303030;
+    /* Keep text white */
+    -fx-text-fill: #FFFFFF;
+    /* Apply slight scale down effect - using JavaFX scale properties */
+    -fx-scale-x: 0.98;
+    -fx-scale-y: 0.98;
+    /* Remove the invalid -fx-transform */
+    /* -fx-transform: scale(0.98); */
+}
+
+/* --- Top Bar Specifics (Example) --- */
+/* You might need to add a style class to the HBox in Java code: topBar.getStyleClass().add("top-bar"); */
+.top-bar {
+     -fx-background-color: #6F6732; /* 頂部欄使用強調色背景 */
+     -fx-padding: 8 15 8 15;
+     -fx-background-radius: 10 10 0 0; /* 圓角頂部 */
+}
+.top-bar .button {
+    -fx-background-color: #DCF2CC; /* 頂部欄按鈕背景 */
+    -fx-text-fill: #1F1F1F; /* 頂部欄按鈕文字 */
+}
+.top-bar .button:hover {
+    -fx-background-color: derive(#DCF2CC, -5%);
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.3), 3, 0, 0, 1);
+}
+
+/* --- Content Panels --- */
+.content-panel {
+    -fx-background-radius: 10;
+    -fx-background-color: #EBDACB;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.2), 5, 0, 0, 1);
+    -fx-padding: 15;
+}
+
+.right-panel {
+    -fx-background-radius: 10;
+    -fx-background-color: #DCF2CC;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.2), 5, 0, 0, 1);
+    -fx-padding: 15;
+}
+
+/* Ensure text areas fill all available space */
+.text-area {
+    -fx-pref-height: 100%;
+    -fx-min-height: 100;
+    -fx-vgrow: always;
+}
+
+/* Improved containers for better vertical space usage */
+.scroll-pane {
+    -fx-background-color: transparent;
+    -fx-background-radius: 8;
+    -fx-border-radius: 8;
+    -fx-fit-to-height: true;
+    -fx-fit-to-width: true;
+    -fx-padding: 0;
+}
+
+.scroll-pane > .viewport {
+   -fx-background-color: transparent;
+   -fx-background-radius: 8;
+}
+
+.scroll-bar:horizontal, .scroll-bar:vertical{
+    -fx-background-color: transparent;
+    /* Make scroll bar track area thinner */
+    -fx-pref-width: 8;
+    -fx-pref-height: 8;
+    -fx-padding: 0;
+    -fx-background-radius: 4;
+}
+
+/* Completely hide increment/decrement buttons */
+.increment-button, .decrement-button {
+    -fx-opacity: 0;
+    -fx-background-color: transparent;
+    -fx-border-color: transparent;
+    -fx-padding: 0;
+    -fx-pref-width: 0;
+    -fx-pref-height: 0;
+    -fx-max-width: 0;
+    -fx-max-height: 0;
+}
+
+/* Hide arrow shapes in the increment/decrement buttons */
+.increment-arrow, .decrement-arrow {
+    -fx-shape: " ";
+    -fx-padding: 0;
+}
+
+.scroll-bar:horizontal .track,
+.scroll-bar:vertical .track{
+    -fx-background-color: rgba(0,0,0,0.1);
+    -fx-border-color: transparent;
+    -fx-background-radius: 4;
+}
+
+.scroll-bar:horizontal .thumb,
+.scroll-bar:vertical .thumb {
+    /* Make thumb semi-transparent and rounded */
+    -fx-background-color: rgba(120, 120, 120, 0.4); /* Semi-transparent by default */
+    -fx-background-radius: 4;
+    /* Adjust insets for thickness, make it thin */
+    -fx-background-insets: 0; /* Uniform insets */
+    /* Transition for smooth appearance */
+    -fx-transition: background-color 0.3s ease-in-out;
+}
+
+/* Show thumb when scrolling or hovering over the scroll-pane */
+.scroll-pane:hover .scroll-bar:vertical .thumb,
+.scroll-pane:hover .scroll-bar:horizontal .thumb,
+.scroll-bar:vertical:pressed .thumb,
+.scroll-bar:horizontal:pressed .thumb {
+     -fx-background-color: rgba(120, 120, 120, 0.7); /* Semi-transparent grey */
+}
+
+/* --- Chart --- */
+.chart {
+    -fx-padding: 10px;
+    -fx-background-radius: 8;
+}
+.chart-plot-background {
+    -fx-background-color: #3A3A3A;
+    -fx-background-radius: 8;
+}
+.chart-vertical-grid-lines {
+    -fx-stroke: #444444;
+}
+.chart-horizontal-grid-lines {
+    -fx-stroke: #444444;
+}
+.axis {
+   -fx-tick-label-fill: #E0E0E0;
+   -fx-tick-length: 5;
+   -fx-border-color: #555555 transparent transparent transparent;
+}
+.axis-label {
+    -fx-text-fill: #E0E0E0;
+}
+.chart-bar {
+    -fx-bar-fill: -fx-accent; /* Bar Chart 顏色 */
+    -fx-background-color: linear-gradient(#ffd700, #ffae00);
+}
+
+/* Specific adjustments for competitor entries if needed */
+#competitor-entry {
+    -fx-border-color: #555555;
+    -fx-border-width: 1; /* Full border */
+    -fx-padding: 8;
+    -fx-background-radius: 8;
+    -fx-border-radius: 8;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.1), 2, 0, 0, 1);
+}
+
+/* Dialog Pane */
+.dialog-pane {
+    -fx-background-color: -fx-background;
+    -fx-border-color: #555555;
+    -fx-border-width: 1;
+    -fx-background-radius: 8;
+    -fx-border-radius: 8;
+}
+.dialog-pane .label {
+     -fx-text-fill: #E0E0E0;
+}
+.dialog-pane > .button-bar > .container {
+  -fx-background-color: -fx-background;
+  -fx-background-radius: 0 0 8 8;
+}
+
+/* Adjust slider colors */
+.slider .track {
+    -fx-background-color: #555;
+}
+.slider .thumb {
+    -fx-background-color: -fx-accent;
+}
+
+/* --- Command+T / Control+T Search Dialog --- */
+.search-history-dialog {
+    -fx-background-color: rgba(44, 44, 44, 0.95);
+    -fx-background-radius: 10;
+    -fx-padding: 20;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.5), 20, 0, 0, 5);
+}
+
+.search-history-title {
+    -fx-text-fill: #cccccc;
+    -fx-font-size: 14px;
+    -fx-padding: 0 0 10 0;
+}
+
+.search-history-field {
+    -fx-background-color: rgba(58, 58, 58, 0.7);
+    -fx-text-fill: white;
+    -fx-prompt-text-fill: #9E9E9E;
+    -fx-background-radius: 20;
+    -fx-border-radius: 20;
+    -fx-border-color: rgba(255, 255, 255, 0.1);
+    -fx-padding: 10 15 10 15;
+    -fx-font-size: 14px;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.2), 3, 0, 0, 1);
+}
+
+.search-history-item {
+    -fx-background-color: transparent;
+    -fx-padding: 10 15 10 15;
+    -fx-cursor: hand;
+}
+
+.search-history-item:hover {
+    -fx-background-color: rgba(255, 255, 255, 0.1);
+    -fx-background-radius: 5;
+}
+
+.search-history-item-icon {
+    -fx-text-fill: #aaaaaa;
+    -fx-font-size: 16px;
+}
+
+.search-history-item-text {
+    -fx-text-fill: white;
+    -fx-font-size: 14px;
+}
+
+.search-history-scroll {
+    -fx-background-color: transparent;
+    -fx-background: transparent;
+    -fx-padding: 0;
+}
+
+.search-history-scroll .viewport {
+    -fx-background-color: transparent;
+}
+
+/* --- Monthly Report Styles --- */
+#monthly-report-content {
+    -fx-background-color: #1F1F1F;
+}
+
+#monthly-report-content .chart {
+    -fx-padding: 15;
+    -fx-background-color: rgba(44, 44, 44, 0.5);
+    -fx-background-radius: 8;
+}
+
+#monthly-report-content .chart-title {
+    -fx-text-fill: #E0E0E0;
+    -fx-font-size: 16px;
+    -fx-font-weight: bold;
+}
+
+#monthly-report-content .button {
+    -fx-background-color: #E67649;
+    -fx-text-fill: white;
+    -fx-background-radius: 20;
+    -fx-border-radius: 20;
+    -fx-padding: 10 20 10 20;
+}
+
+#monthly-report-content .button:hover {
+    -fx-background-color: derive(#E67649, 10%);
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.3), 5, 0, 0, 1);
+}
+
+/* --- Button Styles --- */
+.button {
+    -fx-background-color: #E67649;
+    -fx-text-fill: white;
+    -fx-background-radius: 20;
+    -fx-border-radius: 20;
+    -fx-padding: 8 15 8 15;
+    -fx-cursor: hand;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.2), 3, 0, 0, 1);
+}
+
+.button:hover {
+    -fx-background-color: derive(#E67649, 10%);
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.3), 5, 0, 0, 1);
+}
+
+/* Active tab/toggle button style */
+.toggle-button, .button.toggle {
+    -fx-background-color: #E67649;
+    -fx-text-fill: white;
+    -fx-background-radius: 20;
+    -fx-border-radius: 20;
+    -fx-padding: 8 15 8 15;
+    -fx-cursor: hand;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.2), 3, 0, 0, 1);
+}
+
+.toggle-button:selected, .button.toggle.active {
+    -fx-background-color: #8B4513; /* Darker brown when active */
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.4), 4, 0, 0, 1);
+    -fx-text-fill: #FFFFFF;
+}
+
+.toggle-button:hover, .button.toggle:hover {
+    -fx-background-color: derive(#E67649, 10%);
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.3), 5, 0, 0, 1);
+} 
