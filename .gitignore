@@ -1,0 +1,50 @@
+# IntelliJ IDEA
+.idea/
+*.iml
+*.iws
+*.ipr
+out/
+
+# Eclipse
+.classpath
+.project
+.settings/
+bin/
+
+# Gradle
+.gradle/
+build/
+gradle-app.setting
+
+# Mac OS
+.DS_Store
+
+# Java
+*.class
+*.jar
+*.war
+*.ear
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+env/
+.venv/
+venv/
+ENV/
+
+# VS Code
+.vscode/
+
+# ADF files
+*.adf
+
+# Large files & sensitive data
+*.log
+/logs/
+*.tmp
+
+# JSON data (如果太大且屬於測試數據，可考慮排除)
+# *.json 
