@@ -21,6 +21,11 @@ dependencies {
 
     // Add Emoji library for handling emoji codes in reviews
     implementation 'com.vdurmont:emoji-java:5.1.1' // Or latest version
+    
+    // Jackson 套件 (用於 AI 分析功能)
+    implementation 'com.fasterxml.jackson.core:jackson-core:2.16.1'
+    implementation 'com.fasterxml.jackson.core:jackson-databind:2.16.1'
+    implementation 'com.fasterxml.jackson.core:jackson-annotations:2.16.1'
 
     // 測試函式庫 (可選，但建議加入)
     testImplementation 'org.junit.jupiter:junit-jupiter-api:5.9.2'
