@@ -42,4 +42,4 @@ git clone https://github.com/ntoujavaproject/store-strategist.git
 
 ## 授權
 
-此專案僅供教育用途，非商業使用。 
+此專案僅供教育用途，非商業使用。

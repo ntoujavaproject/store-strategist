@@ -202,41 +202,39 @@ class Restaurant:
                 "Content-Type": "application/json; charset=UTF-8"
             }
 
+            def ensure_string(value):
+                if value is None:
+                    return {"nullValue": None}
+                return {"stringValue": str(value)}
+
             writes = []
             for review in self.reviews:
-                review_id = review.review_id
-                document_path = f"projects/{project_id}/databases/(default)/documents/restaurants/{self.id}/reviews/{review_id}"
-
-                def ensure_string(value):
-                    return str(value) if value is not None else ""
-
                 writes.append({
                     "update": {
-                        "name": document_path,
+                        "name": f"projects/{project_id}/databases/(default)/documents/restaurants/{self.id}/reviews/{review.review_id}",
                         "fields": {
-                                "reviewer_id": {"stringValue": ensure_string(review.reviewer_id)},
-                                "review_id": {"stringValue": ensure_string(review.review_id)},
-                                "comment": {"stringValue": ensure_string(review.comment)},
-                                "star_rating": {"doubleValue": review.star_rating or 0},
-                                "comment_date": {"stringValue": ensure_string(review.comment_date)},
-                                "photo_url": {"stringValue": ensure_string(review.photo_url)},
-                                "service_type": {"stringValue": ensure_string(review.service_type)},
-                                "meal_type": {"stringValue": ensure_string(review.meal_type)},
-                                "spend": {"stringValue": ensure_string(review.spend)},
-                                "food_score": {"doubleValue": review.food_score or 0},
-                                "service_score": {"doubleValue": review.service_score or 0},
-                                "atmosphere_score": {"doubleValue": review.atmosphere_score or 0}
+                            "reviewer_id": ensure_string(review.reviewer_id),
+                            "review_id": ensure_string(review.review_id),
+                            "comment": ensure_string(review.comment),
+                            "star_rating": ensure_string(review.star_rating),
+                            "comment_date": ensure_string(review.comment_date),
+                            "photo_url": ensure_string(review.photo_url),
+                            "service_type": ensure_string(review.service_type),
+                            "meal_type": ensure_string(review.meal_type),
+                            "spend": ensure_string(review.spend),
+                            "food_score": ensure_string(review.food_score),
+                            "service_score": ensure_string(review.service_score),
+                            "atmosphere_score": ensure_string(review.atmosphere_score)
                         }
                     }
                 })
 
             json_data = {"writes": writes}
 
-            response = requests.post(url, headers=headers, json=json_data)
+            response = requests.post(url, headers=headers, json=json_data, timeout=10)
+            response.raise_for_status()
 
-            print(f"批量新增評論 HTTP 狀態碼：{response.status_code}")
-            print(f"回應內容：{response.text}")
-
+            print(f"更新評論 HTTP 狀態碼：{response.status_code}")
         except Exception as e:
             print(f"發生錯誤：{e}")
 
@@ -256,153 +254,222 @@ class Review:
         self.service_score = service_score
         self.atmosphere_score = atmosphere_score
 
+
 def search_restaurants_id_in_radius(lat, lon, radius=50):
-    restaurant_ids = set()
-    types = ['Restaurants', 'Bars', 'Coffee', 'Takeout', 'Delivery']
-    search_url = "https://www.google.com.tw/maps/search/{type}/@{lat},{lon},{radius}m/data=!3m1!1e3!4m2!2m1!6e5?entry=ttu&g_ep=EgoyMDI1MDUxMy4xIKXMDSoASAFQAw%3D%3D"
+    """
+    使用Google Maps API搜尋特定範圍內的餐廳ID
+    """
+    url = "https://www.google.com.tw/maps/search/@" + str(lat) + "," + str(lon) + ",15z/data=!3m1!4b1!4m2!2m1!6e5"
+    response = requests.get(url, headers=headers)
+    
+    # 使用正則表達式提取所有商店ID
+    pattern = r'null,null,null,\["(\w+)",null'
+    store_ids = set(re.findall(pattern, response.text))
+    
+    # 使用另一個模式尋找其他可能的ID
+    pattern2 = r'\["(\w+)","\d+'
+    store_ids.update(re.findall(pattern2, response.text))
+    
+    return list(store_ids)
 
-    for t in types:
-        url = search_url.format(type=t, lat=lat, lon=lon, radius=radius)
-        retries = 3
-        for attempt in range(retries):
-            try:
-                response = requests.get(url, headers=headers, timeout=10)
-                response.raise_for_status()
-                soup = bs(response.text, "html.parser")
-                pattern = r'0x.{16}:0x.{16}'
-                store_id_list = set(re.findall(pattern, str(soup)))
-                restaurant_ids.update([store_id.replace('\\', '') for store_id in store_id_list])
-                break
-            except (requests.RequestException, re.error) as e:
-                if attempt < retries - 1:
-                    time.sleep(2 ** attempt)
-                else:
-                    print(f"Failed to fetch data for type {t} after {retries} attempts: {e}")
-
-    return restaurant_ids
 
 def search_restaurants_id_in_area(center_lat, center_lon, search_radius, grid_radius=50):
-    restaurant_ids = set()
-
-    lat_increment = grid_radius / 111000
-    lon_increment = grid_radius / (111000 * math.cos(math.radians(center_lat)))
-
-    num_steps = math.ceil(search_radius / grid_radius)
-
-    total_points = (2 * num_steps + 1) ** 2
-    print(f"總共有 {total_points} 個點要搜尋")
-
+    """
+    使用網格方式在較大區域內搜尋餐廳ID
+    """
+    km_per_degree_lat = 111.32  # 每緯度大約距離(公里)
+    km_per_degree_lon = 110.57 * math.cos(math.radians(center_lat))  # 在當前緯度下每經度大約距離(公里)
+    
+    lat_range = search_radius / km_per_degree_lat
+    lon_range = search_radius / km_per_degree_lon
+    
+    grid_count = int(search_radius / grid_radius) or 1
+    
+    all_restaurant_ids = set()
+    
     def fetch_ids(i, j):
-        grid_lat = center_lat + i * lat_increment
-        grid_lon = center_lon + j * lon_increment
-        return search_restaurants_id_in_radius(grid_lat, grid_lon, grid_radius)
+        grid_lat = center_lat + (i / grid_count) * lat_range
+        grid_lon = center_lon + (j / grid_count) * lon_range
+        restaurant_ids = search_restaurants_id_in_radius(grid_lat, grid_lon, grid_radius)
+        return restaurant_ids
+    
+    with tpe(max_workers=4) as executor:
+        tasks = []
+        for i in range(-grid_count, grid_count + 1):
+            for j in range(-grid_count, grid_count + 1):
+                tasks.append(executor.submit(fetch_ids, i, j))
+        
+        for task in tasks:
+            all_restaurant_ids.update(task.result())
+    
+    return list(all_restaurant_ids)
 
-    with tpe() as executor:
-        futures = [executor.submit(fetch_ids, i, j) for i in range(-num_steps, num_steps + 1) for j in range(-num_steps, num_steps + 1)]
-        for idx, future in enumerate(futures, start=1):
-            restaurant_ids.update(future.result())
-            print(f"已搜尋 {idx}/{total_points} 個點")
-
-    return restaurant_ids
 
 def get_restaurant_info(restaurant_id):
-    restaurant_name_url = "https://www.google.com.tw/maps/place/data=!4m5!3m4!1s{restaurant_id}!8m2!3d25.0564743!4d121.5204167?authuser=0&hl=zh-TW&rclk=1"
-    url = restaurant_name_url.format(restaurant_id=restaurant_id)
-    retries = 3
-    for attempt in range(retries):
-        try:
-            response = requests.get(url, headers=headers, timeout=15)
-            if response.status_code == 400:
-                raise requests.RequestException("get_restaurant_info false HTTP 400 Bad Request {url}")
-            response.raise_for_status()
-            soup = bs(response.text, "html.parser")
-            meta_list = soup.find_all('meta')
-            restaurant_name = []
-            restaurant_address = []
-            for i in meta_list:
-                if '''itemprop="name"''' in str(i):
-                    name_match = re.search('".*·', str(i))
-                    address_match = re.search('·.*" ', str(i))
-                    if name_match:
-                        restaurant_name.append(name_match.group()[1:-2])
-                    if address_match:
-                        restaurant_address.append(address_match.group()[2:-2])
-                    
-            name = restaurant_name[0] if restaurant_name else "Unknown"
-            address = restaurant_address[0] if restaurant_address else "Unknown"
-            return name, address
-        except (requests.RequestException, re.error) as e:
-            if attempt < retries - 1:
-                time.sleep(2 ** attempt)
-            else:
-                print(f"Failed to fetch name and address for restaurant ID {restaurant_id} after {retries} attempts: {e}")
-                return "Unknown", "Unknown"
+    """
+    根據餐廳ID獲取餐廳詳細資訊
+    """
+    url = f"https://www.google.com.tw/maps/place/?q=place_id:{restaurant_id}"
+    response = requests.get(url, headers=headers)
+    soup = bs(response.text, 'html.parser')
+    
+    # 提取餐廳名稱
+    try:
+        name_tag = soup.find('meta', {'property': 'og:title'})
+        restaurant_name = name_tag['content'] if name_tag else None
+    except:
+        restaurant_name = None
+    
+    # 提取餐廳地址
+    try:
+        address_tag = soup.find('meta', {'property': 'og:description'})
+        restaurant_address = address_tag['content'] if address_tag else None
+    except:
+        restaurant_address = None
+    
+    return {
+        'id': restaurant_id,
+        'name': restaurant_name,
+        'address': restaurant_address
+    }
+
 
 def get_restaurants_in_area(center_lat, center_lon, search_radius):
+    """
+    獲取區域內所有餐廳的詳細資訊
+    """
     restaurant_ids = search_restaurants_id_in_area(center_lat, center_lon, search_radius)
-    restaurants: list[Restaurant] = []
-
+    
     def fetch_name(restaurant_id):
-        retries = 3
-        for attempt in range(retries):
-            try:
-                return get_restaurant_info(restaurant_id)
-            except Exception as e:
-                if attempt < retries - 1:
-                    time.sleep(2 ** attempt)
-                else:
-                    print(f"Failed to fetch name for restaurant ID {restaurant_id} after {retries} attempts: {e}")
-                    return "Unknown", "Unknown"
-
-    with tpe() as executor:
-        futures = {executor.submit(fetch_name, restaurant_id): restaurant_id for restaurant_id in restaurant_ids}
-        for idx, (future, restaurant_id) in enumerate(futures.items(), start=1):
-            name, address = future.result()
-            if name == "Unknown" or address == "Unknown":
-                print(f"無法獲取餐廳名稱或地址，ID: {restaurant_id}")
-                continue
-            restaurants.append(Restaurant(restaurant_id, name, address))
-            print(f"已獲取 {idx}/{len(restaurant_ids)} 家餐廳的名稱和地址")
-
+        try:
+            return get_restaurant_info(restaurant_id)
+        except Exception as e:
+            print(f"獲取餐廳 {restaurant_id} 資訊時出錯: {e}")
+            return None
+    
+    restaurants = []
+    with tpe(max_workers=4) as executor:
+        results = executor.map(fetch_name, restaurant_ids)
+        
+        for result in results:
+            if result and result['name'] and result['address']:
+                restaurant = Restaurant(
+                    id=result['id'],
+                    name=result['name'],
+                    address=result['address']
+                )
+                restaurants.append(restaurant)
+    
     return restaurants
 
+
 def add_res_by_name():
-    pass
+    names = ["海大燒臘", "爾灣口味噴泉", "海那邊小食堂"]
 
 
 def main():
-    restaurants: list[Restaurant] = get_restaurants_in_area(center_lat=center_lat, center_lon=center_lon, search_radius=search_radius)
-    print(f"找到 {len(restaurants)} 家餐廳")
-    with tpe() as executor:
-        futures = []
-        for idx, restaurant in enumerate(restaurants, start=1):
-            print(f"正在處理第 {idx}/{len(restaurants)} 家餐廳的評論抓取...")
-            futures.append(executor.submit(restaurant.get_reviews))
-
-        for idx, (future, restaurant) in enumerate(zip(futures, restaurants), start=1):
-            future.result()
-            print(f"第 {idx}/{len(restaurants)} 家餐廳的評論抓取完成。")
-            if len(restaurant.reviews) > 0:
-                print(f"正在上傳第 {idx}/{len(restaurants)} 家餐廳的評論到 Firestore...")
-                executor.submit(restaurant.upload_to_firestore)
+    print("1. 搜尋區域內餐廳")
+    print("2. 手動輸入餐廳名稱")
+    
+    choice = input("請選擇操作 (1/2): ")
+    
+    if choice == "1":
+        lat = float(input("輸入中心點緯度 (預設: 25.1494729): ") or "25.1494729")
+        lon = float(input("輸入中心點經度 (預設: 121.7641153): ") or "121.7641153")
+        radius = float(input("輸入搜尋半徑 (公里) (預設: 5): ") or "5")
+        
+        print(f"正在搜尋以 ({lat}, {lon}) 為中心，半徑 {radius} 公里內的餐廳...")
+        restaurants = get_restaurants_in_area(lat, lon, radius)
+        
+        print(f"找到 {len(restaurants)} 家餐廳:")
+        for i, restaurant in enumerate(restaurants, 1):
+            print(f"{i}. {restaurant.name} - {restaurant.address}")
+        
+        selected_indices = input("請選擇要分析的餐廳編號 (用逗號分隔，全選請輸入 'all'): ")
+        
+        if selected_indices.lower() == 'all':
+            selected_restaurants = restaurants
+        else:
+            indices = [int(idx) - 1 for idx in selected_indices.split(',')]
+            selected_restaurants = [restaurants[idx] for idx in indices if 0 <= idx < len(restaurants)]
+        
+    elif choice == "2":
+        selected_restaurants = []
+        while True:
+            restaurant_name = input("輸入餐廳名稱 (輸入空白結束): ")
+            if not restaurant_name:
+                break
+                
+            restaurant_id = input("輸入餐廳 ID (可選): ")
+            if not restaurant_id:
+                print("搜尋餐廳ID...")
+                # 執行搜尋邏輯
+            
+            restaurant_address = input("輸入餐廳地址 (可選): ")
+            
+            restaurant = Restaurant(
+                id=restaurant_id or f"manual_{len(selected_restaurants)}",
+                name=restaurant_name,
+                address=restaurant_address or "手動輸入"
+            )
+            selected_restaurants.append(restaurant)
+    
+    # 開始分析
+    if selected_restaurants:
+        for restaurant in selected_restaurants:
+            print(f"正在獲取 {restaurant.name} 的評論...")
+            restaurant.get_reviews()
+            
+            filename = f"{restaurant.name}_reviews.json"
+            with open(f"reviews_data/{filename}", 'w', encoding='utf-8') as f:
+                reviews_data = []
+                for review in restaurant.reviews:
+                    reviews_data.append({
+                        "reviewer_id": review.reviewer_id,
+                        "review_id": review.review_id,
+                        "comment": review.comment,
+                        "star_rating": review.star_rating,
+                        "comment_date": review.comment_date,
+                        "photo_url": review.photo_url,
+                        "service_type": review.service_type,
+                        "meal_type": review.meal_type,
+                        "spend": review.spend,
+                        "food_score": review.food_score,
+                        "service_score": review.service_score,
+                        "atmosphere_score": review.atmosphere_score
+                    })
+                json.dump(reviews_data, f, ensure_ascii=False, indent=2)
+            
+            print(f"評論已保存到 {filename}")
+            
+            # 更新追蹤的餐廳列表
+            try:
+                with open('reviews_data/tracked_restaurants.json', 'r', encoding='utf-8') as f:
+                    tracked_restaurants = json.load(f)
+            except (FileNotFoundError, json.JSONDecodeError):
+                tracked_restaurants = []
+            
+            # 檢查餐廳是否已經存在於列表中
+            if not any(r.get('id') == restaurant.id for r in tracked_restaurants):
+                tracked_restaurants.append({
+                    'id': restaurant.id,
+                    'name': restaurant.name,
+                    'address': restaurant.address,
+                    'last_updated': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                })
+                
+                with open('reviews_data/tracked_restaurants.json', 'w', encoding='utf-8') as f:
+                    json.dump(tracked_restaurants, f, ensure_ascii=False, indent=2)
+            
+            print(f"是否上傳 {restaurant.name} 的資料到 Firestore?")
+            upload_choice = input("輸入 'y' 確認上傳: ")
+            if upload_choice.lower() == 'y':
+                print(f"正在上傳 {restaurant.name} 的資料...")
+                restaurant.upload_to_firestore()
+                print("上傳完成!")
+    
+    print("程序完成!")
 
 
 if __name__ == "__main__":
     main()
-
-'''
-評論者id            reviewer_id
-評論id              review_id
-評論者的總評論數     reviewer_total_reviews
-評論者的總照片數     reviewer_total_photos
-星級                star_rating 
-評論                comment
-一張照片            photo_url
-使用服務            service_type
-餐點類型            meal_type
-消費金額            spend
-餐點分數            food_score
-服務分數            service_score
-氣氛分數            atmosphere_score
-留言日期            comment_date
-''' 
