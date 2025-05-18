@@ -286,12 +286,12 @@ def search_restaurants_id_in_area(center_lat, center_lon, search_radius, grid_ra
     grid_count = int(search_radius / grid_radius) or 1
     
     all_restaurant_ids = set()
-    
+
     def fetch_ids(i, j):
         grid_lat = center_lat + (i / grid_count) * lat_range
         grid_lon = center_lon + (j / grid_count) * lon_range
         restaurant_ids = search_restaurants_id_in_radius(grid_lat, grid_lon, grid_radius)
-        return restaurant_ids
+    return restaurant_ids
     
     with tpe(max_workers=4) as executor:
         tasks = []
@@ -339,11 +339,11 @@ def get_restaurants_in_area(center_lat, center_lon, search_radius):
     獲取區域內所有餐廳的詳細資訊
     """
     restaurant_ids = search_restaurants_id_in_area(center_lat, center_lon, search_radius)
-    
+
     def fetch_name(restaurant_id):
-        try:
-            return get_restaurant_info(restaurant_id)
-        except Exception as e:
+            try:
+                return get_restaurant_info(restaurant_id)
+            except Exception as e:
             print(f"獲取餐廳 {restaurant_id} 資訊時出錯: {e}")
             return None
     
@@ -359,7 +359,7 @@ def get_restaurants_in_area(center_lat, center_lon, search_radius):
                     address=result['address']
                 )
                 restaurants.append(restaurant)
-    
+
     return restaurants
 
 
