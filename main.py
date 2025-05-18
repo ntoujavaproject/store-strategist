@@ -12,7 +12,7 @@ import requests
 
 center_lat = 25.1494729
 center_lon = 121.7641153
-search_radius = 50
+search_radius = 10
 project_id = "java2025-91d74"
 headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
                        "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/55.0.2883.87 Safari/537.36"
@@ -40,7 +40,7 @@ class Restaurant:
         next_token = ""
         comment_list = []
         for page in range(1, page_count+1):
-            print(f"第 {page} 頁開始抓取")
+            #print(f"第 {page} 頁開始抓取")
             
             params = {
                 "authuser": "0",
@@ -56,7 +56,11 @@ class Restaurant:
             response = requests.get(self.comment_url, params=params, headers=headers)
             data = json.loads(emoji.demojize(response.text[4:]))
             #print(f"第 {page} 抓取結束")
-            next_token = data[1]
+            try:
+                next_token = data[1]
+            except IndexError:
+                print(f"Unexpected data structure: {data} {self.id} {page} {self.name}")
+                break
             comment_list.extend(data[2])
             if not next_token:
                 #print(f"所有評論以抓取完成，總共抓取 {len(comment_list)} 則評論")
@@ -145,9 +149,20 @@ class Restaurant:
         return
 
     def upload_to_firestore(self):
-        self.upload_res()
-        self.upload_review()
-    
+        retries = 7
+        for attempt in range(retries):
+            try:
+                self.upload_res()
+                time.sleep(0.5)
+                self.upload_review()
+                break
+            except Exception as e:
+                if attempt < retries - 1:
+                    print(f"重試中，嘗試次數：{attempt + 1}/{retries}")
+                    time.sleep(2 ** attempt)
+                else:
+                    print(f"上傳失敗：{e}")
+
     def upload_res(self):
         retries = 7
         for attempt in range(retries):
@@ -241,7 +256,7 @@ class Review:
         self.service_score = service_score
         self.atmosphere_score = atmosphere_score
 
-def search_restaurants_id_in_radius(lat, lon, radius=125):
+def search_restaurants_id_in_radius(lat, lon, radius=50):
     restaurant_ids = set()
     types = ['Restaurants', 'Bars', 'Coffee', 'Takeout', 'Delivery']
     search_url = "https://www.google.com.tw/maps/search/{type}/@{lat},{lon},{radius}m/data=!3m1!1e3!4m2!2m1!6e5?entry=ttu&g_ep=EgoyMDI1MDUxMy4xIKXMDSoASAFQAw%3D%3D"
@@ -358,12 +373,18 @@ def add_res_by_name():
 def main():
     restaurants: list[Restaurant] = get_restaurants_in_area(center_lat=center_lat, center_lon=center_lon, search_radius=search_radius)
     print(f"找到 {len(restaurants)} 家餐廳")
-    #for restaurant in restaurants:
-    restaurants[0].get_reviews()
-    if len(restaurants[0].reviews) > 0:
-        restaurants[0].upload_to_firestore()
-    # if not none
-    #    restaurant.upload_to_firestore()
+    with tpe() as executor:
+        futures = []
+        for idx, restaurant in enumerate(restaurants, start=1):
+            print(f"正在處理第 {idx}/{len(restaurants)} 家餐廳的評論抓取...")
+            futures.append(executor.submit(restaurant.get_reviews))
+
+        for idx, (future, restaurant) in enumerate(zip(futures, restaurants), start=1):
+            future.result()
+            print(f"第 {idx}/{len(restaurants)} 家餐廳的評論抓取完成。")
+            if len(restaurant.reviews) > 0:
+                print(f"正在上傳第 {idx}/{len(restaurants)} 家餐廳的評論到 Firestore...")
+                executor.submit(restaurant.upload_to_firestore)
 
 
 if __name__ == "__main__":
