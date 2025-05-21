@@ -6,6 +6,9 @@ import javafx.animation.ParallelTransition;
 import javafx.animation.Interpolator;
 import javafx.application.Application;
 import javafx.application.Platform;
+import javafx.beans.binding.Bindings;
+import javafx.beans.property.DoubleProperty;
+import javafx.beans.property.SimpleDoubleProperty;
 import javafx.beans.value.ChangeListener;
 import javafx.beans.value.ObservableValue;
 import javafx.geometry.Insets;
@@ -73,7 +76,7 @@ import java.nio.file.Paths;
 import java.time.YearMonth;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
-import java.util.Arrays;
+
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -87,12 +90,17 @@ import javax.imageio.ImageIO;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
+import javafx.scene.Parent;
+import javafx.event.EventHandler;
+import javafx.scene.input.ScrollEvent;
+
+import bigproject.RightPanel;
 
 /**
  * 餐廳市場分析系統主應用程式
  * (Layout: 70% Reviews, 30% Ratings/Sources, Top-Right Buttons)
  */
-public class compare extends Application implements UIManager.StateChangeListener, PreferencesManager.SettingsStateChangeListener {
+public class compare extends Application implements UIManager.StateChangeListener, PreferencesManager.SettingsStateChangeListener, AIChat.ChatStateChangeListener {
 
     private VBox competitorListVBox;
     private BorderPane mainLayout;
@@ -100,7 +108,7 @@ public class compare extends Application implements UIManager.StateChangeListene
     private HBox mainContentBox; // 將mainContentBox升級為類成員變數
     private VBox mainContainer; // 將mainContainer也升級為類成員變數
     private ScrollPane leftScrollPane; // 將leftScrollPane也升級為類成員變數
-    private VBox rightPanel; // 將rightPanel也升級為類成員變數
+    private RightPanel rightPanel; // 使用新的 RightPanel 類替代原來的 VBox
 
     private Preferences prefs = Preferences.userNodeForPackage(compare.class);
 
@@ -126,6 +134,9 @@ public class compare extends Application implements UIManager.StateChangeListene
     
     // 添加 PreferencesManager 成員變量
     private PreferencesManager preferencesManager;
+    
+    // 添加 AIChat 實例
+    private AIChat aiChat;
 
     // 新配色方案
     private static final String PALE_DARK_YELLOW = "#6F6732";
@@ -143,18 +154,7 @@ public class compare extends Application implements UIManager.StateChangeListene
     private static final String KEY_FONT_SIZE = "fontSize";
     private static final String KEY_DARK_MODE = "darkMode";
 
-    // --- Search History Storage ---
-    private List<String> searchHistory = new ArrayList<>(Arrays.asList(
-        "海大燒臘", "基隆海那邊小食堂", "基隆夜市美食", "基隆咖啡廳",
-        "基隆特色餐廳", "海大附近美食", "基隆港邊海鮮"
-    ));
-    
-    // 搜索對話框參考
-    private Stage searchDialog = null;
-    
-    // 添加一個時間戳變數來防止對話框快速重開
-    private long lastDialogCloseTime = 0;
-    private static final long DIALOG_REOPEN_DELAY = 800; // 800毫秒的延遲防止閃爍
+    // 搜尋歷史功能已移除
     
     // 按鈕樣式
     private String normalButtonStyle;
@@ -179,21 +179,27 @@ public class compare extends Application implements UIManager.StateChangeListene
     private String currentTabId = null; // 當前選定的頁面ID
     private HBox tabBar; // 分頁欄
 
-    // 添加AI聊天相關的狀態變量
-    private final boolean[] isAIChatActive = {false};
-    private Button aiChatBackButton;
-    private VBox aiChatContainer;
-    private TextArea chatHistoryArea;
-    private TextField userInputField;
-    private String currentChatContentType = "";
-    private String currentChatInitialContent = "";
-
     @Override
     public void start(Stage primaryStage) {
-        // 設置視窗最大化顯示 - 提前設置，確保啟動時就是全螢幕
+        // 設置關閉窗口的處理器
+        primaryStage.setOnCloseRequest(event -> {
+            // 清理資源
+            System.exit(0);
+        });
+        // 獲取螢幕尺寸，計算最小視窗大小
+        Rectangle2D screenBounds = Screen.getPrimary().getVisualBounds();
+        double halfWidth = screenBounds.getWidth() / 2;
+        double halfHeight = screenBounds.getHeight() / 2;
+        
+        // 設置視窗最小尺寸為螢幕的一半
+        primaryStage.setMinWidth(halfWidth);
+        primaryStage.setMinHeight(halfHeight);
+        primaryStage.setResizable(true);
+        
+        // 設置視窗預設為最大化顯示
         primaryStage.setMaximized(true);
         
-        // 設置視窗標題和大小
+        // 設置視窗標題
         primaryStage.setTitle("餐廳分析");
         
         // 載入應用程式圖標
@@ -205,7 +211,6 @@ public class compare extends Application implements UIManager.StateChangeListene
         mainLayout.setPadding(new Insets(15, 15, 0, 0)); // 完全移除底部邊距，右邊也移除以避免對分頁欄位置的影響
         mainLayout.setStyle("-fx-background-color: #2C2C2C;"); // 使用深色背景統一風格
         mainLayout.setPrefHeight(Double.MAX_VALUE); // 確保主佈局填滿整個高度
-        mainLayout.setPrefWidth(Double.MAX_VALUE); // 確保主佈局填滿整個寬度
         
         // 設置主佈局初始不可見，用於後續動畫
         mainLayout.setOpacity(0);
@@ -297,42 +302,274 @@ public class compare extends Application implements UIManager.StateChangeListene
         // --- 創建搜索欄作為布局固定部分 ---
         HBox searchContainer = new HBox(10);
         searchContainer.setAlignment(Pos.CENTER);
-        searchContainer.setPadding(new Insets(10, 20, 10, 20));
+        searchContainer.setPadding(new Insets(15, 20, 15, 20));
         searchContainer.setMaxWidth(Double.MAX_VALUE); // 允許最大寬度
         searchContainer.setPrefWidth(Double.MAX_VALUE); // 填滿可用寬度
-        searchContainer.setMinHeight(50); // 確保足夠高度
-        searchContainer.setStyle("-fx-background-color: rgba(80, 80, 80, 0.6); -fx-background-radius: 5;");
+        searchContainer.setMinHeight(60); // 增加高度
+        searchContainer.setStyle("-fx-background-color: #3A3A3A; -fx-background-radius: 10; -fx-border-color: #E67649; -fx-border-width: 1px; -fx-border-radius: 10; -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.3), 8, 0, 0, 2);");
+        searchContainer.setVisible(true); // 確保可見
+        searchContainer.setManaged(true); // 確保被佈局管理
+        
+        // 添加一個標籤，指示這是搜尋區域
+        Label searchLabel = new Label("餐廳搜尋：");
+        searchLabel.setStyle("-fx-text-fill: white; -fx-font-weight: bold; -fx-font-size: 14px;");
+        searchContainer.getChildren().add(searchLabel);
         
         // 創建圓角搜索框
         TextField searchField = new TextField();
-        searchField.setPromptText("搜尋...");
-        searchField.setPrefHeight(35);
+        searchField.setPromptText("請輸入關鍵字搜尋餐廳...");
+        searchField.setPrefHeight(40);  // 增加高度
         searchField.getStyleClass().add("search-history-field");
-        searchField.setStyle("-fx-background-radius: 20; -fx-padding: 5 15 5 15; -fx-font-size: 14px;");
+        searchField.setStyle("-fx-background-radius: 20; -fx-padding: 5 15 5 15; -fx-font-size: 16px; " + 
+                             "-fx-background-color: #1E1E1E; -fx-text-fill: white; " + 
+                             "-fx-prompt-text-fill: #BBBBBB; -fx-border-color: #E67649; " + 
+                             "-fx-border-width: 1.5px; -fx-border-radius: 20; " + 
+                             "-fx-focus-color: #F08159; -fx-faint-focus-color: #F0815944;");
+        searchField.setPrefWidth(Double.MAX_VALUE);
+        searchField.setVisible(true);  // 確保可見
+        searchField.setManaged(true);  // 確保被佈局管理
+        searchField.setEditable(true); // 確保可編輯
         HBox.setHgrow(searchField, Priority.ALWAYS); // 讓搜索框占用所有可用空間
         
+        // 當聚焦時改變樣式
+        searchField.focusedProperty().addListener((obs, oldVal, newVal) -> {
+            if (newVal) { // 獲得焦點
+                searchField.setStyle("-fx-background-radius: 20; -fx-padding: 5 15 5 15; -fx-font-size: 16px; " + 
+                                   "-fx-background-color: #252525; -fx-text-fill: white; " + 
+                                   "-fx-prompt-text-fill: #BBBBBB; -fx-border-color: #F08159; " + 
+                                   "-fx-border-width: 2px; -fx-border-radius: 20; " + 
+                                   "-fx-effect: dropshadow(gaussian, rgba(240,129,89,0.3), 10, 0, 0, 0); " + 
+                                   "-fx-focus-color: #F08159; -fx-faint-focus-color: #F0815944;");
+            } else { // 失去焦點
+                searchField.setStyle("-fx-background-radius: 20; -fx-padding: 5 15 5 15; -fx-font-size: 16px; " + 
+                                   "-fx-background-color: #1E1E1E; -fx-text-fill: white; " + 
+                                   "-fx-prompt-text-fill: #BBBBBB; -fx-border-color: #E67649; " + 
+                                   "-fx-border-width: 1.5px; -fx-border-radius: 20; " + 
+                                   "-fx-focus-color: #F08159; -fx-faint-focus-color: #F0815944;");
+            }
+            
+            // ... existing code ...
+        });
+        
+        // 創建搜尋建議下拉選單容器和搜索框的組合
+        StackPane searchStackPane = new StackPane();
+        searchStackPane.setAlignment(Pos.TOP_LEFT);
+        searchStackPane.setMaxWidth(Double.MAX_VALUE);
+        searchStackPane.setPrefWidth(Double.MAX_VALUE);
+        searchStackPane.setMinWidth(400); // 設置最小寬度
+        searchStackPane.setVisible(true); // 確保可見
+        searchStackPane.setManaged(true); // 確保被佈局管理
+        HBox.setHgrow(searchStackPane, Priority.ALWAYS);
+
+        // 建立搜尋建議下拉選單
+        VBox suggestionsBox = new VBox(2); // 減少間距，更緊湊
+        suggestionsBox.setStyle("-fx-background-color: #1E1E1E; -fx-border-color: #E67649; -fx-border-width: 0 1.5 1.5 1.5; " +
+                                "-fx-border-radius: 0 0 15 15; -fx-background-radius: 0 0 15 15; " + 
+                                "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.4), 10, 0, 0, 5);");
+        suggestionsBox.setVisible(false);
+        suggestionsBox.setPrefWidth(searchField.getWidth());
+        suggestionsBox.setMaxWidth(Double.MAX_VALUE);
+        suggestionsBox.setMaxHeight(350);  // 增加建議選單高度
+        suggestionsBox.setPadding(new Insets(5, 0, 5, 0));  // 添加內部邊距
+        
+        // 設置較高層級，確保顯示在其他元素上方
+        StackPane.setAlignment(suggestionsBox, Pos.TOP_LEFT);
+        
+        // 當搜索框寬度變化時，同步更新建議框寬度和位置
+        searchField.widthProperty().addListener((obs, oldVal, newVal) -> {
+            suggestionsBox.setPrefWidth(newVal.doubleValue());
+        });
+        
+        // 確保suggestionsBox的寬度與searchField一致，並設置正確的位置
+        searchField.heightProperty().addListener((obs, oldVal, newVal) -> {
+            suggestionsBox.setTranslateY(newVal.doubleValue());
+        });
+        
+        // 添加到堆疊面板中
+        searchStackPane.getChildren().addAll(searchField, suggestionsBox);
+        searchStackPane.setPrefWidth(Double.MAX_VALUE);
+        VBox.setMargin(searchStackPane, new Insets(0, 0, 5, 0)); // 添加底部間距
+        
+        // 搜尋組件將在下面添加到容器中
+        
+        // 設置建議框的位置 (在搜索框下方)
+        suggestionsBox.setTranslateY(searchField.getHeight());
+        
+        // 確保 StackPane 能夠擴展填充可用空間
+        HBox.setHgrow(searchStackPane, Priority.ALWAYS);
+        
+        // 自動搜尋的防抖動設計
+        final java.util.Timer[] searchTimer = {null};
+        final int DEBOUNCE_DELAY = 300; // 降低延遲以提高反應速度
+        
+        // 監聽文字變更，顯示搜尋建議
+        searchField.textProperty().addListener((observable, oldValue, newValue) -> {
+            // 取消上一個計時器
+            if (searchTimer[0] != null) {
+                searchTimer[0].cancel();
+            }
+            
+            // 如果輸入為空，隱藏建議選單
+            if (newValue == null || newValue.trim().isEmpty()) {
+                suggestionsBox.setVisible(false);
+                suggestionsBox.getChildren().clear();
+                return;
+            }
+            
+            // 創建新計時器，延遲執行搜尋
+            searchTimer[0] = new java.util.Timer();
+            searchTimer[0].schedule(new java.util.TimerTask() {
+                @Override
+                public void run() {
+                    // 確保在JavaFX主執行緒中執行UI操作
+                    Platform.runLater(() -> {
+                        // 獲取搜尋建議
+                        try {
+                            suggestionsBox.getChildren().clear();
+                            org.json.JSONObject searchResult = new bigproject.search.AlgoliaRestaurantSearch().performSearch(newValue.trim(), true);
+                            int hitsCount = searchResult.getInt("nbHits");
+                            
+                            if (hitsCount > 0) {
+                                // 顯示建議選單
+                                suggestionsBox.setVisible(true);
+                                
+                                // 取得搜尋結果
+                                org.json.JSONArray hits = searchResult.getJSONArray("hits");
+                                int limit = Math.min(hits.length(), 8); // 最多顯示8個建議
+                                
+                                // 創建建議項目
+                                for (int i = 0; i < limit; i++) {
+                                    org.json.JSONObject hit = hits.getJSONObject(i);
+                                    String restaurantName = hit.getString("name");
+                                    String address = hit.optString("address", "");
+                                    
+                                    // 創建建議項
+                                    HBox suggestionItem = createSuggestionItem(restaurantName, address);
+                                    
+                                    // 設置點擊事件
+                                    suggestionItem.setOnMouseClicked(event -> {
+                                        // 設置文字並立即執行搜尋
+                                        searchField.setText(restaurantName);
+                                        suggestionsBox.setVisible(false);
+                                        
+                                        // 先聚焦到搜尋框上，再執行搜尋
+                                        searchField.requestFocus();
+                                        Platform.runLater(() -> {
+                                            handleSearch(restaurantName);
+                                        });
+                                        
+                                        // 阻止事件傳播
+                                        event.consume();
+                                    });
+                                    
+                                    suggestionsBox.getChildren().add(suggestionItem);
+                                }
+                            } else {
+                                suggestionsBox.setVisible(false);
+                            }
+                        } catch (Exception e) {
+                            System.err.println("獲取搜尋建議時發生錯誤: " + e.getMessage());
+                            suggestionsBox.setVisible(false);
+                        }
+                    });
+                }
+            }, DEBOUNCE_DELAY);
+        });
+        
+        // 當搜索框獲得焦點時，如果有內容則顯示建議選單
+        searchField.focusedProperty().addListener((obs, oldVal, newVal) -> {
+            if (newVal && !searchField.getText().trim().isEmpty()) {
+                // 在搜索框獲得焦點且有內容時，觸發一次搜尋建議
+                if (searchTimer[0] != null) {
+                    searchTimer[0].cancel();
+                }
+                searchTimer[0] = new java.util.Timer();
+                searchTimer[0].schedule(new java.util.TimerTask() {
+                    @Override
+                    public void run() {
+                        Platform.runLater(() -> {
+                            try {
+                                suggestionsBox.getChildren().clear();
+                                org.json.JSONObject searchResult = new bigproject.search.AlgoliaRestaurantSearch().performSearch(searchField.getText().trim(), true);
+                                showSuggestions(searchResult, suggestionsBox, searchField);
+                            } catch (Exception e) {
+                                System.err.println("獲取焦點時的搜尋建議錯誤: " + e.getMessage());
+                            }
+                        });
+                    }
+                }, 100); // 較短的延遲
+            } else if (!newVal) {
+                // 延遲隱藏，避免在點擊選項前隱藏選單
+                new java.util.Timer().schedule(new java.util.TimerTask() {
+                    @Override
+                    public void run() {
+                        Platform.runLater(() -> {
+                            // 如果焦點不在搜索框上，隱藏建議
+                            if (!searchField.isFocused()) {
+                                suggestionsBox.setVisible(false);
+                            }
+                        });
+                    }
+                }, 200);
+            }
+        });
+        
         Button searchButton = new Button("搜尋");
-        searchButton.setMinHeight(35);
-        searchButton.setStyle("-fx-background-color: #E67649; -fx-text-fill: white; -fx-background-radius: 20;");
+        searchButton.setPrefHeight(40);  // 與搜尋欄同高
+        searchButton.setPrefWidth(90);   // 增加寬度
+        searchButton.setStyle("-fx-background-color: #E67649; -fx-text-fill: white; " + 
+                             "-fx-background-radius: 20; -fx-font-weight: bold; -fx-font-size: 15px; " +
+                             "-fx-effect: dropshadow(three-pass-box, rgba(0,0,0,0.2), 5, 0, 0, 1);");
         
         // 添加鼠標懸停效果
         searchButton.setOnMouseEntered(e -> {
-            searchButton.setStyle("-fx-background-color: #F08159; -fx-text-fill: white; -fx-background-radius: 20;");
+            searchButton.setStyle("-fx-background-color: #F08159; -fx-text-fill: white; " + 
+                                 "-fx-background-radius: 20; -fx-font-weight: bold; -fx-font-size: 15px; " + 
+                                 "-fx-effect: dropshadow(three-pass-box, rgba(0,0,0,0.3), 8, 0, 0, 2);");
             searchButton.setCursor(javafx.scene.Cursor.HAND);
         });
         
         searchButton.setOnMouseExited(e -> {
-            searchButton.setStyle("-fx-background-color: #E67649; -fx-text-fill: white; -fx-background-radius: 20;");
+            searchButton.setStyle("-fx-background-color: #E67649; -fx-text-fill: white; " + 
+                                 "-fx-background-radius: 20; -fx-font-weight: bold; -fx-font-size: 15px; " +
+                                 "-fx-effect: dropshadow(three-pass-box, rgba(0,0,0,0.2), 5, 0, 0, 1);");
             searchButton.setCursor(javafx.scene.Cursor.DEFAULT);
         });
         
-        searchContainer.getChildren().addAll(searchField, searchButton);
+        // 添加按下效果
+        searchButton.setOnMousePressed(e -> {
+            searchButton.setStyle("-fx-background-color: #D45E3A; -fx-text-fill: white; " + 
+                                 "-fx-background-radius: 20; -fx-font-weight: bold; -fx-font-size: 15px; " +
+                                 "-fx-effect: dropshadow(three-pass-box, rgba(0,0,0,0.1), 2, 0, 0, 0);");
+        });
+        
+        searchButton.setOnMouseReleased(e -> {
+            searchButton.setStyle("-fx-background-color: #F08159; -fx-text-fill: white; " + 
+                                 "-fx-background-radius: 20; -fx-font-weight: bold; -fx-font-size: 15px; " + 
+                                 "-fx-effect: dropshadow(three-pass-box, rgba(0,0,0,0.3), 8, 0, 0, 2);");
+        });
+        
+        // 清空搜尋容器，重新添加元素
+        searchContainer.getChildren().clear();
+        
+        // 先將搜尋框容器(stackPane)添加到搜尋容器中
+        searchContainer.getChildren().add(searchStackPane);
+        
+        // 再將搜尋按鈕添加到搜尋容器中
+        searchContainer.getChildren().add(searchButton);
+        
+        // 設置搜尋按鈕點擊事件
+        searchButton.setOnAction(e -> {
+            handleSearch(searchField.getText());
+        });
         
         // --- 創建主布局 --- 
-        mainContainer = new VBox(5); // 使用VBox包含全部內容，包括搜索欄
-        mainContainer.getChildren().addAll(searchContainer);
+        mainContainer = new VBox(5); // 使用VBox包含主要內容區域
         mainContainer.setPrefHeight(Double.MAX_VALUE); // 確保填滿整個高度
         VBox.setVgrow(mainContainer, Priority.ALWAYS); // 確保主容器能擴展填滿
+        
+        // 初始化 AIChat 實例
+        aiChat = new AIChat(mainLayout, mainContainer, this);
 
         // --- Main Content Area (HBox: Left 70%, Right 30%) ---
         mainContentBox = new HBox(0); // 移除左右間距，讓青蘋果欄完全貼緊右側邊界
@@ -376,173 +613,7 @@ public class compare extends Application implements UIManager.StateChangeListene
         reviewsSection.getChildren().addAll(reviewsLabel, reviewsArea);
         
         // 右側評分區域
-        rightPanel = new VBox(15); // 初始化rightPanel，增加子元素間距
-        rightPanel.setPrefWidth(450); // 固定為450寬度，確保與右側邊界貼緊
-        rightPanel.setMinWidth(450); // 固定最小寬度，確保貼緊右側邊界
-        rightPanel.setMaxWidth(450); // 固定最大寬度，確保貼緊右側邊界
-        rightPanel.setStyle("-fx-background-color: " + RICH_LIGHT_GREEN + "; -fx-background-radius: 0;"); // 移除圓角，確保無間隙
-        rightPanel.setPadding(new Insets(15, 0, 300, 15)); // 右側邊距為0，底部增加到300，確保內容可滾動到底
-        rightPanel.setMinHeight(3000); // 極大增加最小高度，確保所有內容都能顯示且可滾動
-        rightPanel.setPrefHeight(3500); // 更大的預設高度，確保所有內容都能顯示
-        
-        // Ratings Section
-        ratingsHeader = new Label("綜合評分");
-        ratingsHeader.setFont(Font.font("System", FontWeight.BOLD, 16));
-        ratingsHeader.setStyle("-fx-text-fill: " + PALE_DARK_YELLOW + ";");
-        ratingsBox = new VBox(5);
-        ratingsBox.setPadding(new Insets(5, 0, 15, 0)); // Adjust padding
-        ratingsBox.setStyle("-fx-background-color: transparent;");
-        ratingBars = new HashMap<>();
-        String[] categories = {"餐點", "服務", "環境", "價格"};
-        for (String category : categories) {
-            HBox barBox = new HBox(10);
-            barBox.setAlignment(Pos.CENTER_LEFT);
-            Label catLabel = new Label(category + ":");
-            catLabel.setMinWidth(40);
-            catLabel.setStyle("-fx-text-fill: " + PALE_DARK_YELLOW + ";");
-            ProgressBar progressBar = new ProgressBar(0.0);
-            progressBar.setMaxWidth(Double.MAX_VALUE);
-            HBox.setHgrow(progressBar, Priority.ALWAYS);
-            progressBar.setStyle("-fx-accent: " + RICH_MIDTONE_RED + ";");
-            ratingBars.put(category, progressBar);
-            barBox.getChildren().addAll(catLabel, progressBar);
-            ratingsBox.getChildren().add(barBox);
-        }
-        
-        // Data Sources Section
-        Label sourcesLabel = new Label("資料來源");
-        sourcesLabel.setFont(Font.font("System", FontWeight.BOLD, 16));
-        sourcesLabel.setStyle("-fx-text-fill: " + PALE_DARK_YELLOW + ";");
-        competitorListVBox = new VBox(5);
-        competitorListVBox.setPadding(new Insets(5, 0, 0, 0));
-        competitorListVBox.getChildren().add(createCompetitorEntry("Haidai Roast Shop", "Haidai Roast Shop.json"));
-        competitorListVBox.getChildren().add(createCompetitorEntry("Sea Side Eatery", "Sea Side Eatery Info.json"));
-        
-        // 近期評論區域
-        Label recentReviewsLabel = new Label("近期評論");
-        recentReviewsLabel.setFont(Font.font("System", FontWeight.BOLD, 16));
-        recentReviewsLabel.setStyle("-fx-text-fill: " + PALE_DARK_YELLOW + ";");
-
-        // 創建時間範圍選擇按鈕
-        HBox timeRangeButtonsBox = new HBox(5);
-        timeRangeButtonsBox.setAlignment(Pos.CENTER_LEFT);
-        
-        Button dayButton = new Button("近一天");
-        Button weekButton = new Button("近一週");
-        Button monthButton = new Button("近一個月");
-        
-        // 設置按鈕樣式
-        String timeButtonStyle = "-fx-background-color: #DDDDDD; -fx-text-fill: #555555; -fx-font-size: 11px; -fx-background-radius: 12; -fx-padding: 3 8 3 8;";
-        String timeButtonActiveStyle = "-fx-background-color: " + RICH_MIDTONE_RED + "; -fx-text-fill: white; -fx-font-size: 11px; -fx-background-radius: 12; -fx-padding: 3 8 3 8;";
-        
-        dayButton.setStyle(timeButtonStyle);
-        weekButton.setStyle(timeButtonActiveStyle); // 預設選中一週
-        monthButton.setStyle(timeButtonStyle);
-        
-        // 設置按鈕點擊事件
-        dayButton.setOnAction(e -> {
-            // 更改按鈕樣式
-            dayButton.setStyle(timeButtonActiveStyle);
-            weekButton.setStyle(timeButtonStyle);
-            monthButton.setStyle(timeButtonStyle);
-            
-            // 強制更新顯示近一天的評論
-            System.out.println("近一天按鈕被點擊，開始更新顯示...");
-            updateRecentReviewsDisplay(1); // 1天
-            System.out.println("近一天按鈕點擊處理完成");
-        });
-        
-        weekButton.setOnAction(e -> {
-            // 更改按鈕樣式
-            dayButton.setStyle(timeButtonStyle);
-            weekButton.setStyle(timeButtonActiveStyle);
-            monthButton.setStyle(timeButtonStyle);
-            
-            // 強制更新顯示近一週的評論
-            System.out.println("近一週按鈕被點擊，開始更新顯示...");
-            updateRecentReviewsDisplay(7); // 7天
-            System.out.println("近一週按鈕點擊處理完成");
-        });
-        
-        monthButton.setOnAction(e -> {
-            // 更改按鈕樣式
-            dayButton.setStyle(timeButtonStyle);
-            weekButton.setStyle(timeButtonStyle);
-            monthButton.setStyle(timeButtonActiveStyle);
-            
-            // 強制更新顯示近一個月的評論
-            System.out.println("近一個月按鈕被點擊，開始更新顯示...");
-            
-            // 確保立即顯示近一個月的評論
-            updateRecentReviewsDisplay(30); // 30天
-            
-            System.out.println("近一個月按鈕點擊處理完成");
-        });
-        
-        // 添加懸停效果
-        dayButton.setOnMouseEntered(e -> {
-            if (!dayButton.getStyle().contains(RICH_MIDTONE_RED)) {
-                dayButton.setStyle("-fx-background-color: #EEEEEE; -fx-text-fill: #333333; -fx-font-size: 11px; -fx-background-radius: 12; -fx-padding: 3 8 3 8;");
-            }
-        });
-        
-        dayButton.setOnMouseExited(e -> {
-            if (!dayButton.getStyle().contains(RICH_MIDTONE_RED)) {
-                dayButton.setStyle(timeButtonStyle);
-            }
-        });
-        
-        weekButton.setOnMouseEntered(e -> {
-            if (!weekButton.getStyle().contains(RICH_MIDTONE_RED)) {
-                weekButton.setStyle("-fx-background-color: #EEEEEE; -fx-text-fill: #333333; -fx-font-size: 11px; -fx-background-radius: 12; -fx-padding: 3 8 3 8;");
-            }
-        });
-        
-        weekButton.setOnMouseExited(e -> {
-            if (!weekButton.getStyle().contains(RICH_MIDTONE_RED)) {
-                weekButton.setStyle(timeButtonStyle);
-            }
-        });
-        
-        monthButton.setOnMouseEntered(e -> {
-            if (!monthButton.getStyle().contains(RICH_MIDTONE_RED)) {
-                monthButton.setStyle("-fx-background-color: #EEEEEE; -fx-text-fill: #333333; -fx-font-size: 11px; -fx-background-radius: 12; -fx-padding: 3 8 3 8;");
-            }
-        });
-        
-        monthButton.setOnMouseExited(e -> {
-            if (!monthButton.getStyle().contains(RICH_MIDTONE_RED)) {
-                monthButton.setStyle(timeButtonStyle);
-            }
-        });
-        
-        timeRangeButtonsBox.getChildren().addAll(dayButton, weekButton, monthButton);
-        
-        // 改變預設設置：預設選中近一個月而非近一週
-        // 更改按鈕樣式
-        dayButton.setStyle(timeButtonStyle);
-        weekButton.setStyle(timeButtonStyle);
-        monthButton.setStyle(timeButtonActiveStyle);
-        
-        // 確保載入時就顯示近一個月的評論
-        System.out.println("初始化時自動選擇近一個月按鈕");
-        Platform.runLater(() -> {
-            System.out.println("平台執行自動更新近一個月評論顯示");
-            updateRecentReviewsDisplay(30); // 30天
-        });
-        
-        // 在標題和時間範圍按鈕之間添加間距
-        HBox reviewHeaderBox = new HBox(10);
-        reviewHeaderBox.setAlignment(Pos.CENTER_LEFT);
-        reviewHeaderBox.getChildren().addAll(recentReviewsLabel, timeRangeButtonsBox);
-
-        // 創建近期評論列表容器
-        VBox recentReviewsBox = new VBox(10);
-        recentReviewsBox.setPadding(new Insets(5, 0, 15, 0));
-        recentReviewsBox.setStyle("-fx-background-color: white; -fx-border-color: " + PALE_DARK_YELLOW + "; -fx-border-width: 1; -fx-padding: 10;");
-
-        // 將近期評論區域添加到右側面板 - 移除對updateButtonBox的引用
-        rightPanel.getChildren().addAll(ratingsHeader, ratingsBox, sourcesLabel, competitorListVBox, reviewHeaderBox, recentReviewsBox);
+        rightPanel = new RightPanel(this);
         
         // 添加到頂部面板
         topPanel.getChildren().addAll(reviewsSection, rightPanel);
@@ -554,13 +625,14 @@ public class compare extends Application implements UIManager.StateChangeListene
         
         // 將VBox改為FlowPane以實現自適應排列
         photosContainer = new FlowPane();
-        photosContainer.setHgap(0); // 完全消除水平間距
-        photosContainer.setVgap(0); // 完全消除垂直間距
+        photosContainer.setHgap(5); // 設置水平間距，給予圖片一些呼吸空間
+        photosContainer.setVgap(5); // 設置垂直間距
         photosContainer.setPrefWrapLength(800); // 設置一個較大的固定值，確保能換行
         photosContainer.setPrefWidth(Region.USE_COMPUTED_SIZE);
         photosContainer.setPrefHeight(Region.USE_COMPUTED_SIZE); // 讓高度自動計算
         photosContainer.setMinHeight(250);
-        photosContainer.setStyle("-fx-background-color: #222222; -fx-padding: 0; -fx-spacing: 0;"); // 設置深色背景，移除所有間距
+        photosContainer.setStyle("-fx-background-color: #222222; -fx-padding: 10; -fx-alignment: center;"); // 添加 center 對齊
+        photosContainer.setAlignment(Pos.CENTER); // 設置 FlowPane 的內容居中
         
         // 修改ScrollPane配置
         photosScroll = new ScrollPane();
@@ -663,8 +735,13 @@ public class compare extends Application implements UIManager.StateChangeListene
         VBox.setVgrow(mainContentBox, Priority.ALWAYS); // 讓內容區域自動擴展
         
         // --- Setup Scene and UIManager --- 
-        mainLayout.setCenter(mainContainer); // 使用包含搜索欄的容器作為主要內容
-        mainLayout.setTop(topBar); // 設置頂部欄
+        // 創建頂部組合容器，同時包含頂部按鈕和搜尋欄
+        VBox topContainer = new VBox(10);
+        topContainer.setPadding(new Insets(10, 15, 5, 15));
+        topContainer.getChildren().addAll(topBar, searchContainer);
+        
+        mainLayout.setCenter(mainContainer); // 使用主容器作為主要內容
+        mainLayout.setTop(topContainer); // 設置頂部組合容器
         
         // 明確設置底部的分頁欄，固定在視窗底部
         mainLayout.setBottom(tabBar);
@@ -675,6 +752,15 @@ public class compare extends Application implements UIManager.StateChangeListene
         // 初始化場景，並設置最小尺寸防止過小導致UI變形
         mainScene = new Scene(mainLayout, 1024, 768);
         mainScene.getRoot().setStyle("-fx-min-height: 100%;");
+        
+        // 當點擊搜索框以外的地方時，隱藏建議選單
+        mainScene.setOnMouseClicked(event -> {
+            // 檢查點擊是否在搜索框或建議選單上
+            if (!suggestionsBox.getBoundsInParent().contains(event.getSceneX(), event.getSceneY()) &&
+                !searchField.getBoundsInParent().contains(event.getSceneX(), event.getSceneY())) {
+                suggestionsBox.setVisible(false);
+            }
+        });
 
         // --- Initialize UIManager NOW --- 
         uiManager = new UIManager(prefs, primaryStage, mainScene, mainLayout, mainContentBox); // Pass main HBox instead
@@ -800,7 +886,7 @@ public class compare extends Application implements UIManager.StateChangeListene
             });
         }
         
-        // 為每個區域添加特定的點擊事件 - 改成直接切換到AI聊天視圖
+            // 為每個區域添加特定的點擊事件 - 改成直接呼叫AIChat介面
         featuresArea.setOnMouseClicked(e -> {
             toggleAIChatView("特色討論", featuresArea.getText(), "餐廳特色");
         });
@@ -884,13 +970,14 @@ public class compare extends Application implements UIManager.StateChangeListene
         tabBar.setManaged(true);
         tabBar.toFront(); // 確保分頁欄在最前端
 
-        // --- Position Stage ---
+        // --- Position Stage at Center ---
         try {
             Rectangle2D visualBounds = Screen.getPrimary().getVisualBounds();
-            primaryStage.setX(visualBounds.getMinX() + (visualBounds.getWidth() - mainScene.getWidth()) / 2);
-            primaryStage.setY(visualBounds.getMinY() + (visualBounds.getHeight() - mainScene.getHeight()) / 2);
+            primaryStage.setX(visualBounds.getMinX() + (visualBounds.getWidth() - primaryStage.getWidth()) / 2);
+            primaryStage.setY(visualBounds.getMinY() + (visualBounds.getHeight() - primaryStage.getHeight()) / 2);
         } catch (Exception e) {
-            // Ignore
+            // Ignore positioning errors
+            System.err.println("無法置中視窗: " + e.getMessage());
         }
         
         // 顯示主舞台
@@ -949,20 +1036,9 @@ public class compare extends Application implements UIManager.StateChangeListene
 
         // --- Button Actions (Search Button) ---
         searchButton.setOnAction(event -> {
-            String address = searchField.getText();
-            if (address != null && !address.trim().isEmpty()) {
-                String trimmedAddress = address.trim();
-                if (trimmedAddress.equalsIgnoreCase("Haidai Roast Shop") || trimmedAddress.contains("海大")) {
-                    loadAndDisplayRestaurantData("Haidai Roast Shop.json");
-                } else if (trimmedAddress.equalsIgnoreCase("Sea Side Eatery") || trimmedAddress.contains("海那邊")) {
-                    loadAndDisplayRestaurantData("Sea Side Eatery Info.json");
-                } else {
-                    openMapInBrowser(trimmedAddress);
-                    clearRestaurantDataDisplay("搜尋結果：" + trimmedAddress);
-                }
-                
-                // 更新搜索歷史
-                updateSearchHistory(trimmedAddress);
+            String query = searchField.getText();
+            if (query != null && !query.trim().isEmpty()) {
+                handleSearch(query.trim());
             } else {
                 // 空搜尋不做任何事
                 System.out.println("Search field is empty. No action taken.");
@@ -978,28 +1054,7 @@ public class compare extends Application implements UIManager.StateChangeListene
              System.out.println("Warning: Google Maps API Key not found or empty.");
         }
 
-        // --- Add keyboard shortcut for search history (Cmd+T/Ctrl+T) ---
-        mainScene.setOnKeyPressed(event -> {
-            // Check for Cmd+T (Mac) or Ctrl+T (Windows/Linux)
-            if (event.isShortcutDown() && event.getCode() == javafx.scene.input.KeyCode.T) {
-                // 檢查對話框是否已經顯示，或者是否在緩衝時間內
-                if (searchDialog != null && searchDialog.isShowing()) {
-                    // 對話框已經顯示，不做任何動作，讓對話框自己處理這個快捷鍵
-                    return;
-                }
-                
-                // 檢查是否太快嘗試重新顯示對話框
-                long currentTime = System.currentTimeMillis();
-                if (currentTime - lastDialogCloseTime < DIALOG_REOPEN_DELAY) {
-                    // 距離上次關閉時間太短，不處理此事件
-                    event.consume();
-                    return;
-                }
-                
-                toggleSearchHistoryDialog(primaryStage);
-                event.consume();
-            }
-        });
+        // --- 刪除Cmd+T/Ctrl+T快捷鍵功能 ---
 
         // 設置窗口監聽以更新搜尋按鈕大小
         final String fullButtonText = "搜尋";
@@ -1059,7 +1114,10 @@ public class compare extends Application implements UIManager.StateChangeListene
         return entryBox;
     }
 
-    private void openMapInBrowser(String query) {
+    /**
+     * 開啟地圖顯示
+     */
+    public void openMapInBrowser(String query) {
         if (Desktop.isDesktopSupported() && Desktop.getDesktop().isSupported(Desktop.Action.BROWSE)) {
             try {
                 String encodedQuery = URLEncoder.encode(query, StandardCharsets.UTF_8.toString());
@@ -1076,125 +1134,42 @@ public class compare extends Application implements UIManager.StateChangeListene
 
     // --- Data Handling Methods (Delegated to DataManager) ---
     private void loadAndDisplayRestaurantData(String jsonFilePath) {
-        dataManager.loadAndDisplayRestaurantData(jsonFilePath, ratingsHeader, ratingsBox, ratingBars, reviewsArea, photosContainer, featuresArea, prosArea, consArea);
+        dataManager.loadAndDisplayRestaurantData(jsonFilePath, 
+            rightPanel.getRatingsHeader(), 
+            rightPanel.getRatingsBox(), 
+            rightPanel.getRatingBars(), 
+            reviewsArea, 
+            photosContainer, 
+            rightPanel.getFeaturesArea(), 
+            rightPanel.getProsArea(), 
+            rightPanel.getConsArea());
         
         // 計算平均消費中位數
         String medianExpense = calculateMedianExpense(jsonFilePath);
         
-        // 更新標題以包含消費資訊
-        String originalTitle = "綜合評分";
-        ratingsHeader.setText(originalTitle);
+        // 更新右側面板的平均消費中位數
+        rightPanel.updateMedianExpense(medianExpense);
         
-        // 在評分區域添加一個專門顯示平均消費的標籤
-        if (ratingsBox != null && !medianExpense.equals("未知")) {
-            // 檢查是否已經有消費標籤
-            boolean hasExpenseLabel = false;
-            for (Node node : ratingsBox.getChildren()) {
-                if (node instanceof HBox && ((HBox) node).getId() != null && ((HBox) node).getId().equals("expenseBox")) {
-                    hasExpenseLabel = true;
-                    // 更新現有標籤
-                    HBox expenseBox = (HBox) node;
-                    // 第二個元素是VBox，不是Label
-                    VBox labelBox = (VBox) expenseBox.getChildren().get(1);
-                    // 從labelBox中獲取第二個元素，即expenseValueLabel
-                    Label expenseValueLabel = (Label) labelBox.getChildren().get(1);
-                    expenseValueLabel.setText(medianExpense);
-                    break;
-                }
-            }
-            
-            // 如果沒有消費標籤，創建一個新的
-            if (!hasExpenseLabel) {
-                HBox expenseBox = new HBox(10);
-                expenseBox.setId("expenseBox");
-                expenseBox.setAlignment(Pos.CENTER_LEFT);
-                expenseBox.setPadding(new Insets(10, 10, 10, 10));
-                expenseBox.setStyle("-fx-background-color: rgba(111, 103, 50, 0.15); -fx-background-radius: 5; -fx-border-color: rgba(111, 103, 50, 0.3); -fx-border-radius: 5; -fx-border-width: 1;");
-                
-                // 創建一個小圖標區域
-                StackPane iconPane = new StackPane();
-                iconPane.setMinSize(24, 24);
-                iconPane.setMaxSize(24, 24);
-                iconPane.setStyle("-fx-background-color: #3A7734; -fx-background-radius: 12;");
-                
-                Label iconLabel = new Label("$");
-                iconLabel.setStyle("-fx-text-fill: white; -fx-font-weight: bold;");
-                iconPane.getChildren().add(iconLabel);
-                
-                // 創建標籤和值的VBox
-                VBox labelBox = new VBox(3);
-                
-                Label expenseLabel = new Label("平均消費中位數");
-                expenseLabel.setStyle("-fx-text-fill: " + PALE_DARK_YELLOW + "; -fx-font-weight: bold;");
-                
-                Label expenseValueLabel = new Label(medianExpense);
-                expenseValueLabel.setStyle("-fx-text-fill: #3A7734; -fx-font-weight: bold; -fx-font-size: 14px;");
-                
-                labelBox.getChildren().addAll(expenseLabel, expenseValueLabel);
-                
-                // 將圖標和標籤添加到HBox
-                expenseBox.getChildren().addAll(iconPane, labelBox);
-                
-                // 添加分隔線
-                Separator separator = new Separator();
-                separator.setStyle("-fx-background-color: " + PALE_DARK_YELLOW + "; -fx-opacity: 0.3;");
-                
-                // 將消費標籤和分隔線添加到評分區域的頂部
-                ratingsBox.getChildren().add(0, expenseBox);
-                ratingsBox.getChildren().add(1, separator);
-            }
-        }
+        // 設置當前JSON檔案路徑，供近期評論功能使用
+        rightPanel.setCurrentJsonFilePath(jsonFilePath);
         
         // 更新近期評論顯示 - 預設選中近一個月按鈕
-        int selectedTimeRange = 30; // 默認一個月
-        
-        // 找到按鈕並設置為活躍狀態
-        for (Node node : rightPanel.getChildren()) {
-            if (node instanceof HBox) {
-                HBox hbox = (HBox) node;
-                for (Node child : hbox.getChildren()) {
-                    if (child instanceof HBox) {
-                        HBox timeButtonsContainer = (HBox) child;
-                        
-                        for (Node btn : timeButtonsContainer.getChildren()) {
-                            if (btn instanceof Button) {
-                                Button timeBtn = (Button) btn;
-                                
-                                // 重設所有按鈕樣式
-                                if (timeBtn.getText().equals("近一天")) {
-                                    timeBtn.setStyle("-fx-background-color: #DDDDDD; -fx-text-fill: #555555; -fx-font-size: 11px; -fx-background-radius: 12; -fx-padding: 3 8 3 8;");
-                                } else if (timeBtn.getText().equals("近一週")) {
-                                    timeBtn.setStyle("-fx-background-color: #DDDDDD; -fx-text-fill: #555555; -fx-font-size: 11px; -fx-background-radius: 12; -fx-padding: 3 8 3 8;");
-                                } else if (timeBtn.getText().equals("近一個月")) {
-                                    // 將近一個月按鈕設為活躍狀態
-                                    timeBtn.setStyle("-fx-background-color: " + RICH_MIDTONE_RED + "; -fx-text-fill: white; -fx-font-size: 11px; -fx-background-radius: 12; -fx-padding: 3 8 3 8;");
-                                    
-                                    // 直接觸發近一個月按鈕的點擊事件
-                                    System.out.println("觸發近一個月按鈕點擊事件");
-                                    timeBtn.fire();
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        
-        // 使用選定的時間範圍強制更新顯示
-        System.out.println("loadAndDisplayRestaurantData: 更新時間範圍為 " + selectedTimeRange + " 天");
-        
-        // 立即更新評論顯示
-        updateRecentReviewsDisplay(selectedTimeRange);
-        
-        // 確保在UI更新完成後也執行一次更新，以防止任何時序問題
-        Platform.runLater(() -> {
-            System.out.println("UI更新後再次強制更新近一個月評論顯示");
-            updateRecentReviewsDisplay(30);
-        });
+        rightPanel.updateRecentReviewsDisplay(30); // 30天
     }
 
-     private void clearRestaurantDataDisplay(String message) {
-         dataManager.clearRestaurantDataDisplay(message, ratingsHeader, ratingsBox, ratingBars, reviewsArea, photosContainer, featuresArea, prosArea, consArea);
+    private void clearRestaurantDataDisplay(String message) {
+        dataManager.clearRestaurantDataDisplay(message, 
+            rightPanel.getRatingsHeader(), 
+            rightPanel.getRatingsBox(), 
+            rightPanel.getRatingBars(), 
+            reviewsArea, 
+            photosContainer, 
+            rightPanel.getFeaturesArea(), 
+            rightPanel.getProsArea(), 
+            rightPanel.getConsArea());
+            
+        // 同時更新右側面板的顯示
+        rightPanel.clearDataDisplay(message);
     }
 
     /**
@@ -1269,393 +1244,65 @@ public class compare extends Application implements UIManager.StateChangeListene
         pause4.play();
     }
 
-    /**
-     * 更新搜索歷史
-     */
-    private void updateSearchHistory(String query) {
-        if (searchHistory.contains(query)) {
-            searchHistory.remove(query);
-        }
-        searchHistory.add(0, query);
-        while (searchHistory.size() > 10) {
-            searchHistory.remove(searchHistory.size() - 1);
-        }
-    }
-
-    /**
-     * 顯示或隱藏搜索歷史對話框 (Cmd+T/Ctrl+T)
-     */
-    private void toggleSearchHistoryDialog(Stage primaryStage) {
-        // 先檢查是否在防反彈時間內
-        long currentTime = System.currentTimeMillis();
-        if (currentTime - lastDialogCloseTime < DIALOG_REOPEN_DELAY) {
-            // 太快嘗試重新打開，直接忽略這次請求
-            return;
-        }
-        
-        if (searchDialog != null && searchDialog.isShowing()) {
-            searchDialog.close();
-            searchDialog = null;
-            lastDialogCloseTime = System.currentTimeMillis();
-            return;
-        }
-        
-        // 檢查是否太快嘗試重新顯示對話框
-        if (currentTime - lastDialogCloseTime < DIALOG_REOPEN_DELAY) {
-            // 距離上次關閉太近，不重新打開
-            return;
-        }
-        
-        // 創建一個半透明背景的對話框
-        searchDialog = new Stage();
-        searchDialog.initModality(Modality.NONE);
-        searchDialog.initOwner(primaryStage);
-        searchDialog.initStyle(StageStyle.TRANSPARENT);
-        
-        // 設置對話框位置和大小 - 正確置中
-        searchDialog.setX(primaryStage.getX() + (primaryStage.getWidth() - 600) / 2);
-        searchDialog.setY(primaryStage.getY() + (primaryStage.getHeight() - 500) / 2);
-        searchDialog.setWidth(600);
-        searchDialog.setHeight(500);
-        
-        // 創建主容器
-        VBox root = new VBox(10);
-        root.getStyleClass().add("search-history-dialog");
-        root.setAlignment(Pos.TOP_CENTER);
-        root.setPadding(new Insets(20, 20, 20, 20));
-        
-        // 創建標題
-        Label title = new Label("搜尋");
-        title.getStyleClass().add("search-history-title");
-        title.setStyle("-fx-font-weight: bold; -fx-font-size: 16px; -fx-text-fill: white;");
-        
-        // 創建搜索欄
-        TextField searchField = new TextField();
-        searchField.setPromptText("搜尋...");
-        searchField.setPrefWidth(550);
-        searchField.setPrefHeight(40);
-        searchField.getStyleClass().add("search-history-field");
-        searchField.setStyle("-fx-background-radius: 20; -fx-padding: 5 15 5 15; -fx-font-size: 14px;");
-        
-        // 創建歷史記錄列表
-        VBox historyList = new VBox(5);
-        historyList.setPadding(new Insets(15, 0, 0, 0));
-        historyList.setAlignment(Pos.TOP_LEFT);
-        
-        // 建立歷史項目列表，用於鍵盤導航
-        List<HBox> historyItems = new ArrayList<>();
-        
-        // 添加歷史記錄項目
-        for (String item : searchHistory) {
-            HBox historyItem = createHistoryItem(item, searchDialog, searchField);
-            historyItems.add(historyItem);
-            historyList.getChildren().add(historyItem);
-        }
-        
-        // 添加搜索邏輯
-        searchField.setOnAction(e -> {
-            String text = searchField.getText().trim();
-            if (!text.isEmpty()) {
-                // 更新搜索歷史
-                updateSearchHistory(text);
-                
-                // 關閉對話框並執行搜索
-                searchDialog.close();
-                searchDialog = null;
-                handleSearch(text);
-            }
-        });
-        
-        // 添加捲動功能
-        ScrollPane scrollPane = new ScrollPane(historyList);
-        scrollPane.setFitToWidth(true);
-        scrollPane.getStyleClass().add("search-history-scroll");
-        scrollPane.setPannable(true);
-        
-        // 設置更合適的樣式，確保滾動條可見並增加邊距
-        scrollPane.setStyle("-fx-background-color: transparent; " +
-                           "-fx-border-color: transparent; " +
-                           "-fx-padding: 0; " +
-                           "-fx-background-insets: 0; " +
-                           "-fx-border-width: 0;");
-                           
-        // 添加拖拽滾動功能
-        final double[] dragStartY = {0};
-        final double[] initialVvalue = {0};
-        
-        scrollPane.setOnMousePressed(event -> {
-            dragStartY[0] = event.getY();
-            initialVvalue[0] = scrollPane.getVvalue();
-            event.consume();
-        });
-        
-        scrollPane.setOnMouseDragged(event -> {
-            double deltaY = dragStartY[0] - event.getY();
-            double contentHeight = historyList.getHeight();
-            double viewportHeight = scrollPane.getHeight();
-            
-            // 調整滾動量，使滾動更流暢
-            if (contentHeight > viewportHeight) {
-                double scrollableRange = contentHeight - viewportHeight;
-                double newVvalue = initialVvalue[0] + (deltaY / scrollableRange);
-                scrollPane.setVvalue(Math.min(1, Math.max(0, newVvalue)));
-            }
-            
-            event.consume();
-        });
-        
-        // 捕捉滾輪事件
-        scrollPane.setOnScroll(event -> {
-            double deltaY = event.getDeltaY() * 0.25; // 減少滾動速度
-            scrollPane.setVvalue(scrollPane.getVvalue() - deltaY / historyList.getHeight());
-            event.consume(); // 防止事件傳播
-        });
-        
-        VBox.setVgrow(scrollPane, Priority.ALWAYS);
-        
-        // 組裝UI
-        root.getChildren().addAll(title, searchField, scrollPane);
-        
-        Scene dialogScene = new Scene(root);
-        dialogScene.setFill(Color.TRANSPARENT);
-        
-        // 載入CSS
-        dialogScene.getStylesheets().add(getClass().getResource("/bigproject/modern_dark_theme.css").toExternalForm());
-        
-        // 當前選中項目索引（用於鍵盤導航）
-        final int[] selectedIndex = {-1};
-        
-        // 添加焦點和鍵盤導航
-        dialogScene.setOnKeyPressed(e -> {
-            switch (e.getCode()) {
-                case ESCAPE:
-                    searchDialog.close();
-                    searchDialog = null;
-                    e.consume(); // 確保事件不會傳播
-                    break;
-                case T:
-                    // 支持在搜索對話框中再次按下 Cmd+T/Ctrl+T 來關閉對話框
-                    if (e.isShortcutDown()) {
-                        searchDialog.close();
-                        searchDialog = null;
-                        e.consume(); // 確保事件不會傳播到主場景
-                    }
-                    break;
-                case DOWN:
-                    // 向下移動選擇
-                    if (historyItems.size() > 0) {
-                        // 取消當前選中項的樣式
-                        if (selectedIndex[0] >= 0 && selectedIndex[0] < historyItems.size()) {
-                            historyItems.get(selectedIndex[0]).setStyle("-fx-background-color: transparent;");
-                        }
-                        
-                        // 下移選擇
-                        selectedIndex[0] = (selectedIndex[0] + 1) % historyItems.size();
-                        
-                        // 設置新選中項樣式
-                        historyItems.get(selectedIndex[0]).setStyle("-fx-background-color: rgba(255, 255, 255, 0.2); -fx-background-radius: 5;");
-                        
-                        // 確保選中項可見
-                        double contentHeight = historyList.getHeight();
-                        double viewportHeight = scrollPane.getViewportBounds().getHeight();
-                        double scrollTop = scrollPane.getVvalue() * (contentHeight - viewportHeight);
-                        double scrollBottom = scrollTop + viewportHeight;
-                        
-                        Node selectedNode = historyItems.get(selectedIndex[0]);
-                        double nodeTop = selectedNode.getBoundsInParent().getMinY();
-                        double nodeBottom = selectedNode.getBoundsInParent().getMaxY();
-                        
-                        if (nodeTop < scrollTop) {
-                            // 節點在視圖上方，需要上滾
-                            scrollPane.setVvalue(nodeTop / (contentHeight - viewportHeight));
-                        } else if (nodeBottom > scrollBottom) {
-                            // 節點在視圖下方，需要下滾
-                            scrollPane.setVvalue((nodeBottom - viewportHeight) / (contentHeight - viewportHeight));
-                        }
-                    }
-                    e.consume();
-                    break;
-                case UP:
-                    // 向上移動選擇
-                    if (historyItems.size() > 0) {
-                        // 取消當前選中項的樣式
-                        if (selectedIndex[0] >= 0 && selectedIndex[0] < historyItems.size()) {
-                            historyItems.get(selectedIndex[0]).setStyle("-fx-background-color: transparent;");
-                        }
-                        
-                        // 上移選擇
-                        selectedIndex[0] = (selectedIndex[0] - 1 + historyItems.size()) % historyItems.size();
-                        
-                        // 設置新選中項樣式
-                        historyItems.get(selectedIndex[0]).setStyle("-fx-background-color: rgba(255, 255, 255, 0.2); -fx-background-radius: 5;");
-                        
-                        // 確保選中項可見
-                        double contentHeight = historyList.getHeight();
-                        double viewportHeight = scrollPane.getViewportBounds().getHeight();
-                        double scrollTop = scrollPane.getVvalue() * (contentHeight - viewportHeight);
-                        double scrollBottom = scrollTop + viewportHeight;
-                        
-                        Node selectedNode = historyItems.get(selectedIndex[0]);
-                        double nodeTop = selectedNode.getBoundsInParent().getMinY();
-                        double nodeBottom = selectedNode.getBoundsInParent().getMaxY();
-                        
-                        if (nodeTop < scrollTop) {
-                            // 節點在視圖上方，需要上滾
-                            scrollPane.setVvalue(nodeTop / (contentHeight - viewportHeight));
-                        } else if (nodeBottom > scrollBottom) {
-                            // 節點在視圖下方，需要下滾
-                            scrollPane.setVvalue((nodeBottom - viewportHeight) / (contentHeight - viewportHeight));
-                        }
-                    }
-                    e.consume();
-                    break;
-                case ENTER:
-                    // 如果有選中項，則使用該項
-                    if (selectedIndex[0] >= 0 && selectedIndex[0] < historyItems.size()) {
-                        String selectedText = searchHistory.get(selectedIndex[0]);
-                        searchDialog.close();
-                        searchDialog = null;
-                        handleSearch(selectedText);
-                        e.consume();
-                    }
-                    break;
-            }
-        });
-        
-        // 搜索欄文字變化時更新列表
-        searchField.textProperty().addListener((obs, oldText, newText) -> {
-            historyList.getChildren().clear();
-            historyItems.clear();
-            selectedIndex[0] = -1;
-            
-            // 過濾歷史記錄
-            for (String item : searchHistory) {
-                if (newText.isEmpty() || item.toLowerCase().contains(newText.toLowerCase())) {
-                    HBox historyItem = createHistoryItem(item, searchDialog, searchField);
-                    historyItems.add(historyItem);
-                    historyList.getChildren().add(historyItem);
-                }
-            }
-        });
-        
-        // 點擊外部關閉
-        root.setOnMouseClicked(e -> {
-            if (e.getTarget() == root) {
-                searchDialog.close();
-                searchDialog = null;
-                // 更新對話框關閉時間戳
-                lastDialogCloseTime = System.currentTimeMillis();
-                e.consume(); // 防止事件傳播
-            }
-        });
-        
-        // 確保對話框在關閉時徹底清理引用
-        searchDialog.setOnHidden(e -> {
-            searchDialog = null;
-            // 更新對話框關閉時間戳
-            lastDialogCloseTime = System.currentTimeMillis();
-        });
-        
-        // 添加漂亮的淡入效果，使用更長的動畫時間提高穩定性
-        FadeTransition fadeIn = new FadeTransition(Duration.millis(300), root);
-        fadeIn.setFromValue(0);
-        fadeIn.setToValue(1.0);
-        fadeIn.setInterpolator(Interpolator.EASE_OUT);
-        
-        // 添加輕微向上滑動效果，增加視覺平滑感
-        TranslateTransition slideIn = new TranslateTransition(Duration.millis(300), root);
-        slideIn.setFromY(10);
-        slideIn.setToY(0);
-        slideIn.setInterpolator(Interpolator.EASE_OUT);
-        
-        // 同時執行兩個動畫
-        ParallelTransition animation = new ParallelTransition(fadeIn, slideIn);
-        
-        // 顯示對話框並聚焦搜索欄
-        searchDialog.setScene(dialogScene);
-        searchDialog.show();
-        animation.play();
-        
-        // 動畫結束後請求焦點
-        animation.setOnFinished(e -> {
-            Platform.runLater(() -> {
-                searchField.requestFocus();
-                searchField.selectAll();
-            });
-        });
-    }
-    
-    /**
-     * 創建歷史記錄項目
-     */
-    private HBox createHistoryItem(String text, Stage dialog, TextField searchField) {
-        HBox item = new HBox(10);
-        item.getStyleClass().add("search-history-item");
-        item.setAlignment(Pos.CENTER_LEFT);
-        item.setPadding(new Insets(10, 15, 10, 15));
-        item.setMinHeight(40);
-        
-        // 歷史記錄圖標
-        Label icon = new Label("🕒");
-        icon.getStyleClass().add("search-history-item-icon");
-        icon.setStyle("-fx-font-size: 14px;");
-        
-        // 歷史記錄文字
-        Label label = new Label(text);
-        label.getStyleClass().add("search-history-item-text");
-        label.setStyle("-fx-font-size: 14px;");
-        HBox.setHgrow(label, Priority.ALWAYS);
-        
-        // 添加滑鼠事件
-        item.setOnMouseEntered(e -> {
-            item.setStyle("-fx-background-color: rgba(255, 255, 255, 0.2); -fx-background-radius: 5;");
-            // 改變滑鼠指標為手形，提示可點擊
-            item.setCursor(javafx.scene.Cursor.HAND);
-        });
-        
-        item.setOnMouseExited(e -> {
-            item.setStyle("-fx-background-color: transparent;");
-            item.setCursor(javafx.scene.Cursor.DEFAULT);
-        });
-        
-        item.setOnMousePressed(e -> {
-            // 點擊效果
-            item.setStyle("-fx-background-color: rgba(255, 255, 255, 0.3); -fx-background-radius: 5;");
-        });
-        
-        item.setOnMouseReleased(e -> {
-            // 恢復懸停效果
-            item.setStyle("-fx-background-color: rgba(255, 255, 255, 0.2); -fx-background-radius: 5;");
-        });
-        
-        item.setOnMouseClicked(e -> {
-            if (text != null && !text.trim().isEmpty()) {
-                searchField.setText(text);
-                dialog.close();
-                searchDialog = null;
-                handleSearch(text);
-                e.consume(); // 確保事件不傳播
-            }
-        });
-        
-        item.getChildren().addAll(icon, label);
-        return item;
-    }
+    // 搜尋歷史功能已移除
     
     /**
      * 處理搜索請求
      */
     private void handleSearch(String query) {
+        // 清空現有評論數據
+        clearRestaurantDataDisplay("正在搜尋 '" + query + "'...");
+        
         if (query != null && !query.trim().isEmpty()) {
             String trimmedQuery = query.trim();
-            if (trimmedQuery.equalsIgnoreCase("Haidai Roast Shop") || trimmedQuery.contains("海大")) {
-                loadAndDisplayRestaurantData("Haidai Roast Shop.json");
-            } else if (trimmedQuery.equalsIgnoreCase("Sea Side Eatery") || trimmedQuery.contains("海那邊")) {
-                loadAndDisplayRestaurantData("Sea Side Eatery Info.json");
-            } else {
-                openMapInBrowser(trimmedQuery);
-                clearRestaurantDataDisplay("搜尋結果：" + trimmedQuery);
-            }
+            
+            // 創建新的執行緒執行 Algolia 搜尋，避免阻塞 UI
+            new Thread(() -> {
+                try {
+                    // 使用 AlgoliaRestaurantSearch 進行搜尋
+                    org.json.JSONObject searchResult = new bigproject.search.AlgoliaRestaurantSearch().performSearch(trimmedQuery, true);
+                    int hitsCount = searchResult.getInt("nbHits");
+                    
+                    // 在主執行緒中更新 UI
+                    Platform.runLater(() -> {
+                        if (hitsCount > 0) {
+                            // 找到搜尋結果，顯示第一個結果
+                            org.json.JSONArray hits = searchResult.getJSONArray("hits");
+                            org.json.JSONObject firstHit = hits.getJSONObject(0);
+                            String restaurantName = firstHit.getString("name");
+                            
+                            // 根據餐廳名稱載入對應的 JSON 檔案
+                            if (restaurantName.contains("海大") || restaurantName.contains("Haidai")) {
+                                loadAndDisplayRestaurantData("Haidai Roast Shop.json");
+                            } else if (restaurantName.contains("海那邊") || restaurantName.contains("Sea Side")) {
+                                loadAndDisplayRestaurantData("Sea Side Eatery Info.json");
+                            } else {
+                                // 如果找不到對應的 JSON 檔案，顯示錯誤訊息
+                                clearRestaurantDataDisplay("找到餐廳：" + restaurantName + "，但無法載入詳細資料");
+                            }
+                            
+                            // 在控制台顯示搜尋結果摘要
+                            System.out.println("找到 " + hitsCount + " 家與「" + trimmedQuery + "」相關的餐廳");
+                            for (int i = 0; i < Math.min(hits.length(), 3); i++) {
+                                org.json.JSONObject hit = hits.getJSONObject(i);
+                                System.out.println((i + 1) + ". " + hit.getString("name") + " - " + hit.optString("address", "無地址資訊"));
+                            }
+                        } else {
+                            // 如果 Algolia 沒有結果，嘗試使用 Google Maps
+                            openMapInBrowser(trimmedQuery);
+                            clearRestaurantDataDisplay("在餐廳資料庫中找不到「" + trimmedQuery + "」，已在 Google Maps 中開啟搜尋");
+                        }
+                    });
+                    
+                } catch (Exception e) {
+                    // 如果搜尋過程出錯，顯示錯誤訊息
+                    e.printStackTrace();
+                    Platform.runLater(() -> {
+                        clearRestaurantDataDisplay("搜尋時發生錯誤：" + e.getMessage());
+                        openMapInBrowser(trimmedQuery);
+                    });
+                }
+            }).start();
         }
         // 空查詢不執行任何操作
     }
@@ -1668,15 +1315,15 @@ public class compare extends Application implements UIManager.StateChangeListene
         isReportActive[0] = isShowing;
         reportButton.setStyle(isShowing ? activeButtonStyle : normalButtonStyle);
         
-        // 如果顯示月報，確保AI聊天視圖被隱藏
-        if (isShowing && isAIChatActive[0]) {
-            hideAIChatView();
+        // 如果顯示報告，確保建議視圖關閉
+        if (isShowing && isSuggestionActive[0]) {
+            isSuggestionActive[0] = false;
+            suggestionButton.setStyle(normalButtonStyle);
         }
         
-        // 如果顯示月報，確保設定視圖關閉
-        if (isShowing && isSettingsActive[0]) {
-            isSettingsActive[0] = false;
-            settingsButton.setStyle(normalButtonStyle);
+        // 如果顯示報告，確保AI聊天視圖關閉
+        if (isShowing && aiChat.isActive()) {
+            aiChat.hideChatView();
         }
     }
     
@@ -1685,9 +1332,15 @@ public class compare extends Application implements UIManager.StateChangeListene
         isSuggestionActive[0] = isShowing;
         suggestionButton.setStyle(isShowing ? activeButtonStyle : normalButtonStyle);
         
-        // 如果顯示建議，確保AI聊天視圖被隱藏
-        if (isShowing && isAIChatActive[0]) {
-            hideAIChatView();
+        // 如果顯示建議，確保報告視圖關閉
+        if (isShowing && isReportActive[0]) {
+            isReportActive[0] = false;
+            reportButton.setStyle(normalButtonStyle);
+        }
+        
+        // 如果顯示建議，確保AI聊天視圖關閉
+        if (isShowing && aiChat.isActive()) {
+            aiChat.hideChatView();
         }
         
         // 如果顯示建議，確保設定視圖關閉
@@ -1697,400 +1350,130 @@ public class compare extends Application implements UIManager.StateChangeListene
         }
     }
     
-    // 切換顯示AI聊天視圖
-    private void toggleAIChatView(String title, String initialContent, String contentType) {
-        // 如果AI聊天已經是活躍的，先隱藏它
-        if (isAIChatActive[0]) {
-            hideAIChatView();
-            return;
-        }
-        
-        // 確保報告和建議視圖都被關閉
+    // 實現 AIChat.ChatStateChangeListener 接口的方法
+    @Override
+    public void onChatStateChanged(boolean isShowing) {
+        // 如果顯示AI聊天，確保其他視圖關閉
+        if (isShowing) {
+            // 如果建議視圖是活躍的，關閉它
+            if (isSuggestionActive[0]) {
+                uiManager.toggleSuggestionsView();
+                isSuggestionActive[0] = false;
+                suggestionButton.setStyle(normalButtonStyle);
+            }
+            
+            // 如果月報視圖是活躍的，關閉它
         if (isReportActive[0]) {
             uiManager.toggleMonthlyReport();
             isReportActive[0] = false;
             reportButton.setStyle(normalButtonStyle);
         }
         
+            // 如果設定視圖是活躍的，關閉它
+            if (isSettingsActive[0]) {
+                preferencesManager.toggleSettingsView();
+                isSettingsActive[0] = false;
+                settingsButton.setStyle(normalButtonStyle);
+            }
+        }
+    }
+    
+    // 實現 PreferencesManager.SettingsStateChangeListener 接口的方法
+    @Override
+    public void onSettingsStateChanged(boolean isShowing) {
+        isSettingsActive[0] = isShowing;
+        settingsButton.setStyle(isShowing ? activeButtonStyle : normalButtonStyle);
+        
+        // 如果顯示設定視圖，確保其他視圖被關閉
+        if (isShowing) {
+            // 如果建議視圖是活躍的，關閉它
         if (isSuggestionActive[0]) {
-            uiManager.toggleSuggestionsView();
             isSuggestionActive[0] = false;
             suggestionButton.setStyle(normalButtonStyle);
         }
         
-        // 保存聊天內容類型和初始內容
-        currentChatContentType = contentType;
-        currentChatInitialContent = initialContent;
-        
-        // 創建或顯示AI聊天視圖
-        showAIChatView(title, initialContent, contentType);
-        
-        // 更新狀態標誌
-        isAIChatActive[0] = true;
-    }
-    
-    // 隱藏AI聊天視圖
-    private void hideAIChatView() {
-        if (aiChatContainer != null && mainLayout.getCenter() == aiChatContainer) {
-            // 恢復原來的主內容
-            mainLayout.setCenter(mainContainer); // 直接使用已存在的mainContainer
+            // 如果月報視圖是活躍的，關閉它
+            if (isReportActive[0]) {
+                isReportActive[0] = false;
+                reportButton.setStyle(normalButtonStyle);
+            }
             
-            // 更新狀態標誌
-            isAIChatActive[0] = false;
+            // 如果AI聊天視圖是活躍的，關閉它
+            if (aiChat.isActive()) {
+                aiChat.hideChatView();
+            }
         }
     }
     
-    // 顯示AI聊天視圖（在主界面上而非彈出窗口）
-    private void showAIChatView(String title, String initialContent, String contentType) {
-        // 創建AI聊天容器
-        aiChatContainer = new VBox(15);
-        aiChatContainer.setPadding(new Insets(20));
-        aiChatContainer.setStyle("-fx-background-color: #2C2C2C;");
-        
-        // 創建頂部欄，包含標題和返回按鈕
-        HBox topBar = new HBox(10);
-        topBar.setAlignment(Pos.CENTER_LEFT);
-        topBar.setPadding(new Insets(0, 0, 15, 0));
-        
-        // 返回按鈕
-        aiChatBackButton = new Button("← 返回");
-        aiChatBackButton.setStyle("-fx-background-color: transparent; -fx-text-fill: #CCCCCC; -fx-cursor: hand;");
-        aiChatBackButton.setOnAction(e -> hideAIChatView());
-        
-        // 添加懸停效果
-        aiChatBackButton.setOnMouseEntered(e -> {
-            aiChatBackButton.setStyle("-fx-background-color: #444444; -fx-text-fill: white; -fx-cursor: hand;");
-        });
-        
-        aiChatBackButton.setOnMouseExited(e -> {
-            aiChatBackButton.setStyle("-fx-background-color: transparent; -fx-text-fill: #CCCCCC; -fx-cursor: hand;");
-        });
-        
-        // 標題標籤
-        Label titleLabel = new Label(title);
-        titleLabel.setFont(Font.font("System", FontWeight.BOLD, 18));
-        titleLabel.setStyle("-fx-text-fill: white;");
-        
-        topBar.getChildren().addAll(aiChatBackButton, titleLabel);
-        
-        // 創建聊天記錄區域
-        chatHistoryArea = new TextArea();
-        chatHistoryArea.setEditable(false);
-        chatHistoryArea.setWrapText(true);
-        chatHistoryArea.setPrefHeight(400);
-        chatHistoryArea.setStyle("-fx-background-color: #333333; -fx-text-fill: white; -fx-font-size: 14px;");
-        VBox.setVgrow(chatHistoryArea, Priority.ALWAYS);
-        
-        // 初始化聊天記錄，添加AI歡迎消息
-        StringBuilder chatHistory = new StringBuilder();
-        chatHistory.append("AI助手: 您好！我們來討論這家餐廳的").append(contentType).append("。\n\n");
-        chatHistory.append("以下是分析結果：\n").append(initialContent).append("\n\n");
-        chatHistory.append("AI助手: 您對這些").append(contentType).append("有什麼想法或問題嗎？\n");
-        chatHistoryArea.setText(chatHistory.toString());
-        
-        // 創建用戶輸入區域
-        userInputField = new TextField();
-        userInputField.setPromptText("輸入您的問題或想法...");
-        userInputField.setPrefHeight(40);
-        userInputField.setStyle("-fx-background-color: #444444; -fx-text-fill: white; -fx-font-size: 14px;");
-        
-        // 創建發送按鈕
-        Button sendButton = new Button("發送");
-        sendButton.setPrefHeight(40);
-        sendButton.setStyle("-fx-background-color: " + RICH_MIDTONE_RED + "; -fx-text-fill: white;");
-        
-        // 添加懸停效果
-        sendButton.setOnMouseEntered(e -> {
-            sendButton.setStyle("-fx-background-color: #F08159; -fx-text-fill: white;");
-        });
-        
-        sendButton.setOnMouseExited(e -> {
-            sendButton.setStyle("-fx-background-color: " + RICH_MIDTONE_RED + "; -fx-text-fill: white;");
-        });
-        
-        // 創建輸入區域佈局
-        HBox inputBox = new HBox(10);
-        inputBox.setAlignment(Pos.CENTER);
-        inputBox.getChildren().addAll(userInputField, sendButton);
-        HBox.setHgrow(userInputField, Priority.ALWAYS);
-        
-        // 處理發送消息的邏輯
-        Runnable sendMessageAction = () -> {
-            String userMessage = userInputField.getText().trim();
-            if (!userMessage.isEmpty()) {
-                // 添加用戶消息到聊天記錄
-                chatHistory.append("\n您: ").append(userMessage).append("\n");
-                chatHistoryArea.setText(chatHistory.toString());
-                
-                // 清空輸入框
-                userInputField.clear();
-                
-                // 添加"AI思考中"的提示
-                chatHistory.append("\nAI助手: 思考中...");
-                chatHistoryArea.setText(chatHistory.toString());
-                
-                // 滾動到底部
-                chatHistoryArea.positionCaret(chatHistoryArea.getText().length());
-                
-                // 使用CompletableFuture在後台處理AI響應
-                CompletableFuture.runAsync(() -> {
-                    try {
-                        // 獲取AI響應 (實際調用Ollama API)
-                        String aiResponse = callOllamaAPI(userMessage, contentType, initialContent);
-                        
-                        // 更新UI (必須在JavaFX線程中進行)
-                        Platform.runLater(() -> {
-                            // 移除"思考中"的提示
-                            chatHistory.delete(chatHistory.length() - 13, chatHistory.length());
-                            // 添加AI的響應
-                            chatHistory.append("\nAI助手: ").append(aiResponse).append("\n");
-                            chatHistoryArea.setText(chatHistory.toString());
-                            
-                            // 滾動到底部
-                            chatHistoryArea.positionCaret(chatHistoryArea.getText().length());
-                        });
-                    } catch (Exception e) {
-                        Platform.runLater(() -> {
-                            // 處理錯誤情況
-                            chatHistory.delete(chatHistory.length() - 13, chatHistory.length());
-                            chatHistory.append("\nAI助手: 抱歉，我遇到了一些問題，無法回應您的問題。\n");
-                            chatHistoryArea.setText(chatHistory.toString());
-                        });
-                        e.printStackTrace();
-                    }
-                });
-            }
-        };
-        
-        // 綁定發送按鈕和回車鍵
-        sendButton.setOnAction(e -> sendMessageAction.run());
-        userInputField.setOnAction(e -> sendMessageAction.run());
-        
-        // 組裝UI
-        aiChatContainer.getChildren().addAll(topBar, chatHistoryArea, inputBox);
-        
-        // 替換主佈局中的內容
-        mainLayout.setCenter(aiChatContainer);
-        
-        // 聚焦到輸入框
-        Platform.runLater(() -> userInputField.requestFocus());
+    /**
+     * 切換顯示AI聊天視圖
+     */
+    public void toggleAIChatView(String title, String initialContent, String contentType) {
+        // 直接使用AIChat實例的toggleChatView方法
+        aiChat.toggleChatView(title, initialContent, contentType);
     }
 
     // 已移除 setupInitialResponsiveLayout 方法，因為它不再被使用且引用了已刪除的方法
 
     /**
-     * 建立響應式設計的版面配置
-     * 針對不同螢幕寬度調整元素位置和大小
+     * 設置固定佈局 (取消RWD功能)
      */
     private void setupResponsiveLayout(Stage primaryStage, HBox mainContentBox, 
                                       ScrollPane leftScrollPane,
                                       Button searchButton) {
-        // 設置最小寬度以確保UI不會被壓縮
+        // 設置固定最小寬度
         mainContentBox.setMinWidth(400);
         
-        // 保存最後一次檢測到的寬度，用於減少不必要的布局切換
-        final double[] lastWidth = {primaryStage.getWidth()};
-        final double[] lastHeight = {primaryStage.getHeight()};
+        // 調整左右面板的固定寬度
+        double rightPanelWidth = 450; // 固定青蘋果欄寬度
+        double availableWidth = primaryStage.getWidth() - 20; // 考慮邊距
+        double leftPanelWidth = availableWidth - rightPanelWidth;
         
-        // 更改視窗大小監聽器，使其能夠即時更新面板大小
-        primaryStage.widthProperty().addListener((obs, oldVal, newVal) -> {
-            double width = newVal.doubleValue();
-            double oldWidth = oldVal.doubleValue();
-            
-            // 即時更新面板大小，不需等待顯著變化
-            if (Math.abs(width - oldWidth) > 1) {
-                updatePanelSizes(mainContentBox, leftScrollPane, width, primaryStage.getHeight());
-                
-                // 確保分頁欄顯示並與視窗底部貼緊
+        // 設置固定大小
+        leftScrollPane.setPrefWidth(leftPanelWidth);
+        leftScrollPane.setMaxWidth(leftPanelWidth);
+        
+        // 調整面板高度
+        adjustPanelHeights(mainContentBox, leftScrollPane, primaryStage.getHeight());
+        
+        // 確保分頁欄顯示
                 ensureTabBarVisible();
                 
-                // 重新調整主佈局，確保分頁欄在底部位置正確
-                mainLayout.layout();
-            }
-            
-            // 調整搜尋按鈕大小
-            if (width < 800) {
-                searchButton.setText("+");
-                searchButton.setPrefWidth(40);
-            } else {
+        // 搜尋按鈕統一使用文字
                 searchButton.setText("搜尋");
                 searchButton.setPrefWidth(75);
-            }
-        });
         
-        primaryStage.heightProperty().addListener((obs, oldVal, newVal) -> {
-            double height = newVal.doubleValue();
-            double oldHeight = oldVal.doubleValue();
-            
-            // 即時更新面板高度
-            if (Math.abs(height - oldHeight) > 1) {
-                adjustPanelHeights(mainContentBox, leftScrollPane, height);
-                updatePanelSizes(mainContentBox, leftScrollPane, primaryStage.getWidth(), height);
-                
-                // 確保分頁欄顯示並與視窗底部貼緊
-                ensureTabBarVisible();
-                
-                // 重新調整主佈局，確保分頁欄在底部位置正確
+        // 主佈局進行一次調整
                 mainLayout.layout();
-                
-                // 延遲確認分頁欄可見性，解決某些情況下分頁欄會消失的問題
-                Platform.runLater(() -> {
-                    ensureTabBarVisible();
-                    mainLayout.layout();
-                });
-            }
-        });
-        
-        // 初始更新一次確保佈局正確
-        Platform.runLater(() -> {
-            updatePanelSizes(mainContentBox, leftScrollPane, primaryStage.getWidth(), primaryStage.getHeight());
-            
-            // 確保分頁欄顯示並與視窗底部貼緊
-            ensureTabBarVisible();
-            
-            // 調整搜尋按鈕大小
-            if (primaryStage.getWidth() < 800) {
-                searchButton.setText("+");
-                searchButton.setPrefWidth(40);
-            } else {
-                searchButton.setText("搜尋");
-                searchButton.setPrefWidth(75);
-            }
-            
-            // 重新調整主佈局，確保分頁欄在底部位置正確
-            mainLayout.layout();
-        });
     }
     
     /**
-     * 調整面板高度以適應視窗高度變化
+     * 調整面板高度
      */
     private void adjustPanelHeights(HBox mainContentBox, ScrollPane leftScrollPane, double windowHeight) {
-        // 計算可用高度（減去頂部工具欄和搜索欄的高度，以及分頁欄的高度）
+        // 固定值設定
         double topBarHeight = 60; // 頂部工具欄高度
         double searchBarHeight = 50; // 搜索欄高度
         double tabBarHeight = 45; // 分頁欄高度
-        double bottomMargin = 0; // 底部無邊距，確保貼緊分頁欄
         
         // 計算實際可用高度
-        double availableHeight = windowHeight - topBarHeight - searchBarHeight - tabBarHeight - bottomMargin - 10; // 減小內邊距確保更貼近分頁欄
+        double availableHeight = windowHeight - topBarHeight - searchBarHeight - tabBarHeight - 10;
         
         // 確保可用高度不小於最小值
-        availableHeight = Math.max(availableHeight, 500);
+        availableHeight = Math.max(availableHeight, 400);
         
         // 設置左側滾動面板高度
         leftScrollPane.setPrefHeight(availableHeight);
         leftScrollPane.setMinHeight(availableHeight);
         
-        // 設置右側面板高度與左側一致，但可以完全填充到分頁欄頂部
+        // 設置右側面板高度
         if (rightPanel != null) {
-            // 讓右側面板完全貼緊分頁欄頂部
-            rightPanel.setPrefHeight(availableHeight + 10); // 略微增加高度確保貼近分頁欄
-            rightPanel.setMinHeight(availableHeight + 10);
-        }
-        
-        System.out.println("調整面板高度完成 - 可用高度: " + availableHeight + "px");
-    }
-    
-    /**
-     * 更新面板大小，確保它們隨視窗大小變化
-     */
-    private void updatePanelSizes(HBox mainContentBox, ScrollPane leftScrollPane, double width, double height) {
-        // 添加靜態標記，防止無限遞迴
-        if (isUpdatingPanels) {
-            return;
-        }
-        isUpdatingPanels = true;
-        
-        try {
-            System.out.println("更新面板尺寸: 寬度=" + width + ", 高度=" + height);
-            
-            // 調整面板高度，確保不超出邊界且貼緊橘線
-            // 分頁欄高度為45，橘線厚度約為2
-            double tabBarHeight = 45;
-            double orangeLineThickness = 2;
-            // 計算可用高度，扣除頂部工具欄、搜索欄和分頁欄的高度
-            double topBarHeight = 60; // 頂部工具欄高度
-            double searchBarHeight = 50; // 搜索欄高度
-            double availableHeight = height - topBarHeight - searchBarHeight - tabBarHeight - orangeLineThickness;
-            
-            // 計算左側和右側面板的寬度 - 修改布局，確保青蘋果欄完全貼緊
-            double rightPanelWidth = 450; // 固定青蘋果欄位寬度為450
-            double spacing = 0; // 完全移除間距，使青蘋果欄貼緊右側
-            double leftPanelWidth = width - rightPanelWidth - spacing - 10; // 縮小左側邊距，確保右側面板完全貼緊
-            
-            // 確保左側面板不會太窄也不會太寬
-            leftPanelWidth = Math.max(leftPanelWidth, 500);
-            // 限制左側面板最大寬度不超過可用空間的70%，讓右側面板可以完全貼緊右邊界
-            leftPanelWidth = Math.min(leftPanelWidth, (width - 15) * 0.7);
-            
-            // 應用新的尺寸設置
-            leftScrollPane.setPrefWidth(leftPanelWidth);
-            leftScrollPane.setMaxWidth(leftPanelWidth);
-            leftScrollPane.setPrefHeight(availableHeight);
-            leftScrollPane.setMaxHeight(availableHeight);
-            
-            // 設置左側面板內容的底部內邊距，確保內容不被截斷
-            VBox leftPanel = (VBox) leftScrollPane.getContent();
-            if (leftPanel != null) {
-                leftPanel.setPadding(new Insets(20, 20, 20, 20)); // 增加底部內邊距，確保內容不被截斷
-            }
-            
-            // 確保右側面板寬度和高度能貼緊橘線和右側邊界
-            if (rightPanel != null) {
-                // 固定寬度為450，確保完全貼緊右側邊界
-                rightPanel.setPrefWidth(450);
-                rightPanel.setMinWidth(450);
-                rightPanel.setMaxWidth(450);
-                
-                // 調整右側面板內容的內邊距，清除右側邊距，確保完全貼緊右側邊界
-                rightPanel.setPadding(new Insets(15, 0, 300, 15)); // 右側邊距為0，大幅增加底部內邊距，確保內容可完全滾動
-                
-                // 設置高度，確保貼緊橘線
-                ScrollPane parentScrollPane = (ScrollPane) rightPanel.getParent().getParent();
-                if (parentScrollPane != null) {
-                    parentScrollPane.setPrefHeight(availableHeight);
-                    parentScrollPane.setMinHeight(Math.min(600, availableHeight));
-                    parentScrollPane.setMaxHeight(availableHeight);
-                    
-                    // 確保背景透明，避免黑色區塊
-                    parentScrollPane.setStyle("-fx-background-color: transparent; -fx-border-color: transparent; -fx-background: transparent; -fx-padding: 0;");
-                    
-                    // 強制顯示垂直滾動條，確保內容可滾動
-                    parentScrollPane.setVbarPolicy(ScrollBarPolicy.ALWAYS);
-                    parentScrollPane.setFitToHeight(false); // 確保內容可滾動而非自動縮放
-                    parentScrollPane.setVmax(1.0); // 確保可以滾動到底部
-                    parentScrollPane.setVvalue(0); // 重置滾動位置到頂部
-                    
-                    // 修復滾動問題
-                    parentScrollPane.setOnScroll(event -> {
-                        double deltaY = event.getDeltaY() * 3.0; // 增加滾動靈敏度
-                        double newValue = parentScrollPane.getVvalue() - deltaY / rightPanel.getHeight() * 10;
-                        parentScrollPane.setVvalue(Math.max(0, Math.min(1, newValue)));
-                        event.consume();
-                    });
-                    
-                    // 確保父容器沒有任何邊距，使面板完全貼緊右側邊界
-                    parentScrollPane.setPadding(new Insets(0, 0, 0, 0));
-                    ((HBox)parentScrollPane.getParent()).setSpacing(0); // 移除HBox間距
-                    
-                    // 重要：設置合適的面板最小高度，確保內容超出時可滾動
-                    rightPanel.setMinHeight(Math.max(2000, availableHeight * 1.5)); // 設定較大的最小高度
-                }
-            }
-            
-            // 立即強制佈局更新
-            mainContentBox.requestLayout();
-            leftScrollPane.requestLayout();
-            
-            // 不再調用 ensureTabBarVisible() 以避免無限循環
-        } finally {
-            isUpdatingPanels = false;
+            rightPanel.setPrefHeight(availableHeight);
+            rightPanel.setMinHeight(availableHeight);
         }
     }
     
-    // 添加靜態標記，用於防止無限遞迴調用
-    private static boolean isUpdatingPanels = false;
+    // 分頁欄顯示狀態標記
     private static boolean isEnsuringTabBar = false;
 
     // 確保分頁欄顯示並固定在視窗底部
@@ -2131,16 +1514,6 @@ public class compare extends Application implements UIManager.StateChangeListene
                 // 確保分頁欄正確貼緊視窗底部
                 tabBar.setSnapToPixel(true);
                 
-                // 如果需要調整面板大小，直接獲取當前維度而不再調用 updatePanelSizes
-                // 注釋掉以下代碼以避免無限循環
-                /*
-                double height = mainLayout.getHeight();
-                double width = mainLayout.getWidth();
-                if (height > 0 && width > 0) {
-                    updatePanelSizes(mainContentBox, leftScrollPane, width, height);
-                }
-                */
-                
                 // 確保主佈局知道在底部區域發生了變化
                 mainLayout.layout();
                 
@@ -2150,6 +1523,23 @@ public class compare extends Application implements UIManager.StateChangeListene
         } finally {
             isEnsuringTabBar = false;
         }
+    }
+
+    /**
+     * 更新面板大小，替代原RWD功能
+     */
+    private void updatePanelSizes(HBox mainContentBox, ScrollPane leftScrollPane, double width, double height) {
+        // 固定佈局設置
+        double rightPanelWidth = 450; // 固定青蘋果欄寬度
+        double availableWidth = width - 20; // 考慮邊距
+        double leftPanelWidth = Math.max(availableWidth - rightPanelWidth, 300); // 確保最小寬度
+        
+        // 設置固定大小
+        leftScrollPane.setPrefWidth(leftPanelWidth);
+        leftScrollPane.setMaxWidth(leftPanelWidth);
+        
+        // 調整面板高度
+        adjustPanelHeights(mainContentBox, leftScrollPane, height);
     }
 
     public static void main(String[] args) {
@@ -2172,6 +1562,7 @@ public class compare extends Application implements UIManager.StateChangeListene
         photoContainer.setMinSize(photoWidth, photoHeight);
         photoContainer.setPrefSize(photoWidth, photoHeight);
         photoContainer.setStyle("-fx-background-color: #222222; -fx-padding: 0; -fx-background-insets: 0; -fx-border-width: 0;");
+        photoContainer.setAlignment(Pos.CENTER); // 設置內容置中
         
         // 創建ImageView顯示照片
         ImageView photoView = new ImageView(image);
@@ -2217,6 +1608,7 @@ public class compare extends Application implements UIManager.StateChangeListene
         // 創建包含圖片的面板
         StackPane photoPane = new StackPane();
         photoPane.setStyle("-fx-background-color: #222222;");
+        photoPane.setAlignment(Pos.CENTER); // 設置面板中內容置中
         
         // 創建可縮放的ImageView
         ImageView photoView = new ImageView(image);
@@ -2429,25 +1821,9 @@ public class compare extends Application implements UIManager.StateChangeListene
         ensureTabBarVisible();
         
         // 確保近期評論時間範圍按鈕正確初始化，默認選擇近一個月
-        for (Node node : rightPanel.getChildren()) {
-            if (node instanceof HBox) {
-                for (Node child : ((HBox) node).getChildren()) {
-                    if (child instanceof HBox) {
-                        for (Node timeBtn : ((HBox) child).getChildren()) {
-                            if (timeBtn instanceof Button) {
-                                Button button = (Button) timeBtn;
-                                if (button.getText().equals("近一個月")) {
-                                    // 觸發近一個月按鈕的點擊事件
-                                    System.out.println("創建新分頁時自動觸發近一個月按鈕點擊");
-                                    button.fire();
-                                    break;
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
+        // 避免呼叫 button.fire()，直接調用更新方法
+        System.out.println("創建新分頁時自動觸發近一個月評論");
+        updateRecentReviewsDisplay(30); // 30天
         
         // 為防止按鈕觸發失敗，手動執行一次更新
         Platform.runLater(() -> {
@@ -2520,8 +1896,7 @@ public class compare extends Application implements UIManager.StateChangeListene
             if (t.id.equals(tabId)) {
                 t.tabBox.setStyle("-fx-background-color: #4D4D4D; -fx-background-radius: 5 5 0 0; -fx-cursor: hand;");
                 ((Label)t.tabBox.getChildren().get(0)).setStyle("-fx-text-fill: white; -fx-font-weight: bold;");
-                // 增加選中標籤的動畫效果
-                AnimationManager.pulse(t.tabBox);
+                // 移除對 AnimationManager.pulse 的呼叫
             } else {
                 t.tabBox.setStyle("-fx-background-color: #333333; -fx-background-radius: 5 5 0 0; -fx-cursor: hand;");
                 ((Label)t.tabBox.getChildren().get(0)).setStyle("-fx-text-fill: #CCCCCC;");
@@ -2538,42 +1913,16 @@ public class compare extends Application implements UIManager.StateChangeListene
             // 獲取目前捲動位置
             double scrollPosition = leftScrollPane.getVvalue();
             
-            // 記錄原本的內容區域
-            Node originalContent = leftScrollPane;
-            
             // 先載入新的資料
             loadAndDisplayRestaurantData(tab.jsonFilePath);
-            
-            // 套用動畫效果 (基於分頁在頁籤欄的位置決定方向)
-            int direction = 1; // 默認是從右向左滑動
-            
-            try {
-                // 嘗試根據分頁在頁籤欄的位置確定滑動方向
-                double prevTabX = tabContents.get(previousTabId).tabBox.getLayoutX();
-                double newTabX = tab.tabBox.getLayoutX();
-                
-                if (prevTabX > newTabX) {
-                    // 新分頁在左側
-                    direction = -1;
-                }
-            } catch (Exception e) {
-                // 發生錯誤時使用預設方向
-                System.err.println("無法判斷分頁切換方向: " + e.getMessage());
-            }
-            
-            // 創建臨時容器以便應用動畫效果
-            StackPane tempContainer = new StackPane();
-            leftScrollPane.setOpacity(0);
-            
-            // 應用淡入效果
-            AnimationManager.fadeIn(leftScrollPane, Duration.millis(400));
             
             // 恢復原本的捲動位置
             Platform.runLater(() -> leftScrollPane.setVvalue(scrollPosition));
         } else {
             // 直接載入內容，沒有之前的分頁
             loadAndDisplayRestaurantData(tab.jsonFilePath);
-            AnimationManager.fadeIn(leftScrollPane, Duration.millis(400));
+            // 移除對 AnimationManager.fadeIn 的呼叫
+            leftScrollPane.setOpacity(1);
         }
         
         // 確保分頁欄可見
@@ -2704,527 +2053,247 @@ public class compare extends Application implements UIManager.StateChangeListene
     }
 
     /**
-     * 調用Ollama API獲取AI回應
+     * 更新近期評論顯示
      */
-    private String callOllamaAPI(String userMessage, String contentType, String initialContent) {
-        try {
-            // Ollama服務器的URL (默認為本地運行的Ollama服務)
-            String ollamaUrl = "http://localhost:11434/api/generate";
-            
-            // 構建請求體
-            String prompt = "你是一個餐廳專業顧問。以下是關於一家餐廳的" + contentType + "的資訊：\n\n" 
-                + initialContent + "\n\n用戶的問題或評論是：" + userMessage 
-                + "\n\n請以專業、友好的方式回應，提供有價值的見解或建議。";
-            
-            JSONObject requestBody = new JSONObject();
-            requestBody.put("model", "llama3"); // 使用Ollama支持的模型，如llama3、mistral等
-            requestBody.put("prompt", prompt);
-            requestBody.put("stream", false);
-            
-            // 創建HTTP請求
-            HttpClient client = HttpClient.newHttpClient();
-            HttpRequest request = HttpRequest.newBuilder()
-                .uri(new URI(ollamaUrl))
-                .header("Content-Type", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofString(requestBody.toString()))
-                .build();
-            
-            // 發送請求並獲取響應
-            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
-            
-            // 解析響應
-            if (response.statusCode() == 200) {
-                JSONObject jsonResponse = new JSONObject(response.body());
-                return jsonResponse.getString("response");
-            } else {
-                // 如果API調用失敗，返回備用回應
-                System.err.println("Ollama API調用失敗，狀態碼: " + response.statusCode());
-                return getBackupAIResponse(userMessage, contentType);
-            }
-        } catch (Exception e) {
-            // 出現異常時，記錄錯誤並返回備用回應
-            System.err.println("Ollama API調用異常: " + e.getMessage());
-            e.printStackTrace();
-            return getBackupAIResponse(userMessage, contentType);
-        }
+    private void updateRecentReviewsDisplay(int days) {
+        System.out.println("正在更新近期評論顯示，顯示近 " + days + " 天的評論...");
+        
+        // 直接使用 RightPanel 的方法，它會調用 LatestReviewsManager 獲取真實數據
+        rightPanel.updateRecentReviewsDisplay(days);
     }
     
     /**
-     * 獲取備用AI回應（當API調用失敗時使用）
+     * 使用示例數據填充近期評論容器
+     * 注意：此方法已不再使用，已由 LatestReviewsManager 替代
+     * 僅作為程式備份保留
      */
-    private String getBackupAIResponse(String userMessage, String contentType) {
-        // 簡易的備用回覆邏輯，與之前的getAIResponse相同
-        String response;
-        
-        // 檢測用戶是否在問一般性問題
-        if (userMessage.contains("推薦") || userMessage.contains("建議")) {
-            response = "基於這家餐廳的" + contentType + "，我建議您可以關注他們的特色菜品，並提前了解價格區間。";
-        } else if (userMessage.contains("價格") || userMessage.contains("多少錢")) {
-            response = "根據分析，這家餐廳的價格屬於中等水平，適合一般消費者。";
-        } else if (userMessage.contains("人氣") || userMessage.contains("熱門")) {
-            response = "這家餐廳在當地確實頗受歡迎，尤其是週末可能需要排隊。";
-        } else if (userMessage.contains("改進") || userMessage.contains("提升")) {
-            response = "如果這家餐廳想要提升體驗，可以考慮改善服務速度和增加一些創新菜品。";
-        } else {
-            // 根據內容類型給出相應回覆
-            switch (contentType) {
-                case "餐廳特色":
-                    response = "這家餐廳的特色主要體現在獨特的菜品風格和氛圍營造上。您能告訴我您對哪方面更感興趣嗎？";
-                    break;
-                case "餐廳優點":
-                    response = "從顧客評價來看，這家餐廳的菜品口味和性價比是其最大的優勢。您想了解更具體的內容嗎？";
-                    break;
-                case "餐廳缺點":
-                    response = "每家餐廳都有可改進之處，根據評價，這家餐廳可能在服務速度和高峰期的座位安排上有待提升。您有遇到過類似的問題嗎？";
-                    break;
-                default:
-                    response = "這是一個有趣的問題。您能告訴我更多您的想法嗎？";
-            }
-        }
-        
-        return response;
-    }
-
-    // 實現 PreferencesManager.SettingsStateChangeListener 接口的方法
-    @Override
-    public void onSettingsStateChanged(boolean isShowing) {
-        isSettingsActive[0] = isShowing;
-        settingsButton.setStyle(isShowing ? activeButtonStyle : normalButtonStyle);
-        
-        // 如果顯示設定視圖，確保其他視圖被關閉
-        if (isShowing) {
-            // 如果建議視圖是活躍的，關閉它
-            if (isSuggestionActive[0]) {
-                isSuggestionActive[0] = false;
-                suggestionButton.setStyle(normalButtonStyle);
-            }
-            
-            // 如果月報視圖是活躍的，關閉它
-            if (isReportActive[0]) {
-                isReportActive[0] = false;
-                reportButton.setStyle(normalButtonStyle);
-            }
-            
-            // 如果AI聊天視圖是活躍的，關閉它
-            if (isAIChatActive[0]) {
-                hideAIChatView();
-            }
-        }
-    }
-
-    /**
-     * 更新近期評論顯示
-     * @param days 要顯示的天數範圍 (1=近一天, 7=近一週, 30=近一個月)
-     */
-    private void updateRecentReviewsDisplay(int days) {
-        VBox recentReviewsBox = null;
-        
-        // 尋找近期評論容器 - 使用更寬鬆的條件
-        System.out.println("開始尋找評論容器 - 右側面板子元素數量: " + rightPanel.getChildren().size());
-        
-        // 檢查是否有初始化過的評論容器
-        int targetIndex = -1;
-        for (int i = 0; i < rightPanel.getChildren().size(); i++) {
-            Node node = rightPanel.getChildren().get(i);
-            if (node instanceof VBox) {
-                System.out.println("檢查 VBox #" + i + ": " + node);
-                // 查找白色背景的容器或在節點和標籤之後的 VBox
-                if (node.getStyle() != null && node.getStyle().contains("background-color: white")) {
-                    recentReviewsBox = (VBox) node;
-                    targetIndex = i;
-                    System.out.println("找到評論容器 (白色背景): " + recentReviewsBox);
-                    break;
-                }
-            }
-        }
-        
-        // 如果找不到現有容器，尋找 Label 為"近期評論"的元素的下一個 VBox
-        if (recentReviewsBox == null) {
-            System.out.println("未找到現有評論容器，嘗試尋找'近期評論'標籤後的VBox");
-            boolean foundReviewsLabel = false;
-            
-            for (int i = 0; i < rightPanel.getChildren().size(); i++) {
-                Node node = rightPanel.getChildren().get(i);
-                
-                // 檢查是否是"近期評論"標籤
-                if (node instanceof HBox) {
-                    for (Node child : ((HBox) node).getChildren()) {
-                        if (child instanceof Label && ((Label) child).getText().equals("近期評論")) {
-                            foundReviewsLabel = true;
-                            System.out.println("找到'近期評論'標籤，索引: " + i);
-                            break;
-                        }
-                    }
-                }
-                
-                // 如果找到標籤且當前索引小於總數-1，檢查下一個元素
-                if (foundReviewsLabel && i < rightPanel.getChildren().size() - 1) {
-                    Node nextNode = rightPanel.getChildren().get(i + 1);
-                    if (nextNode instanceof VBox) {
-                        recentReviewsBox = (VBox) nextNode;
-                        targetIndex = i + 1;
-                        System.out.println("找到評論容器 (在標籤後): " + recentReviewsBox);
-                        break;
-                    }
-                }
-            }
-        }
-        
-        // 如果仍然找不到，則創建一個新的評論容器
-        if (recentReviewsBox == null) {
-            System.out.println("無法找到評論容器，創建新的容器");
-            recentReviewsBox = new VBox(5);
-            recentReviewsBox.setPadding(new Insets(5, 0, 15, 0));
-            recentReviewsBox.setStyle("-fx-background-color: white; -fx-border-color: " + PALE_DARK_YELLOW + "; -fx-border-width: 1; -fx-padding: 10;");
-            
-            // 首先尋找"近期評論"標籤
-            boolean foundLabel = false;
-            for (int i = 0; i < rightPanel.getChildren().size(); i++) {
-                Node node = rightPanel.getChildren().get(i);
-                if (node instanceof HBox) {
-                    for (Node child : ((HBox) node).getChildren()) {
-                        if (child instanceof Label && ((Label) child).getText().equals("近期評論")) {
-                            foundLabel = true;
-                            // 標籤後添加新容器
-                            rightPanel.getChildren().add(i + 1, recentReviewsBox);
-                            targetIndex = i + 1;
-                            System.out.println("已添加新評論容器到標籤後");
-                            break;
-                        }
-                    }
-                }
-                if (foundLabel) break;
-            }
-            
-            // 如果找不到標籤，將容器添加到末尾
-            if (!foundLabel) {
-                rightPanel.getChildren().add(recentReviewsBox);
-                targetIndex = rightPanel.getChildren().size() - 1;
-                System.out.println("已添加新評論容器到末尾");
-            }
-        }
-        
-        if (recentReviewsBox == null) return;
+    private void updateRecentReviewsWithSampleData(VBox recentReviewsBox, int days) {
+        System.out.println("警告：使用範例數據代替真實數據！此功能已棄用。");
         
         // 清空現有內容
         recentReviewsBox.getChildren().clear();
         
-        try {
-            // 獲取當前餐廳的名稱
-            if (currentTabId == null || !tabContents.containsKey(currentTabId)) return;
-            String restaurantName = tabContents.get(currentTabId).displayName;
-            
-            // 構建 reviews_data 目錄中的評論檔案路徑 - 改進檔案名稱比對邏輯
-            String reviewsFilePath = "";
-            
-            // 根據顯示名稱確定正確的檔案名稱
-            if (restaurantName.contains("海大") || restaurantName.equalsIgnoreCase("Haidai Roast Shop")) {
-                reviewsFilePath = "reviews_data/海大燒臘_reviews.json";
-                System.out.println("使用海大燒臘評論檔案: " + reviewsFilePath);
-            } else if (restaurantName.contains("海那邊") || restaurantName.equalsIgnoreCase("Sea Side Eatery")) {
-                reviewsFilePath = "reviews_data/海那邊小食堂_reviews.json";
-                System.out.println("使用海那邊小食堂評論檔案: " + reviewsFilePath);
-            } else {
-                // 使用原來的邏輯作為後備
-                reviewsFilePath = "reviews_data/" + restaurantName.replace(" ", "_") + "_reviews.json";
-                System.out.println("使用預設評論檔案路徑: " + reviewsFilePath);
-            }
-            
-            // 檢查檔案是否存在
-            if (!Files.exists(Paths.get(reviewsFilePath))) {
-                Label noReviews = new Label("尚未抓取此餐廳的評論資料");
-                noReviews.setStyle("-fx-text-fill: #555555; -fx-font-style: italic; -fx-font-size: 13px;");
-                recentReviewsBox.getChildren().add(noReviews);
-                return;
-            }
-            
-            // 讀取 JSON 數據
-            String content = new String(Files.readAllBytes(Paths.get(reviewsFilePath)));
-            JSONArray reviews;
-            
-            try {
-                // 首先嘗試作為對象讀取（含有 "reviews" 字段）
-                JSONObject reviewsData = new JSONObject(content);
-                reviews = reviewsData.getJSONArray("reviews");
-                System.out.println("成功從 JSONObject 中讀取評論數組，評論數: " + reviews.length());
-            } catch (Exception e) {
-                // 如果失敗，直接嘗試作為數組讀取
-                try {
-                    reviews = new JSONArray(content);
-                    System.out.println("成功直接讀取評論數組，評論數: " + reviews.length());
-                } catch (Exception e2) {
-                    // 如果兩種方式都失敗，拋出異常
-                    throw new RuntimeException("無法解析評論數據: " + e2.getMessage() + "\n原始錯誤: " + e.getMessage());
-                }
-            }
-            
-            // 獲取當前時間
-            long currentTimeMs = System.currentTimeMillis();
-            long daysInMs = days * 24 * 60 * 60 * 1000L;
-            
-            // 新增：顯示當前時間和時間範圍資訊，幫助診斷
-            System.out.println("當前時間: " + new java.text.SimpleDateFormat("yyyy/MM/dd HH:mm:ss").format(new java.util.Date(currentTimeMs)));
-            System.out.println("時間範圍: " + days + " 天 (" + new java.text.SimpleDateFormat("yyyy/MM/dd HH:mm:ss").format(new java.util.Date(currentTimeMs - daysInMs)) + " 至今)");
-            System.out.println("評論總數: " + reviews.length());
-            
-            // 過濾最近的評論
-            List<JSONObject> recentReviews = new ArrayList<>();
-            for (int i = 0; i < reviews.length(); i++) {
-                JSONObject review = reviews.getJSONObject(i);
-                
-                // 檢查評論時間
-                String dateStr = review.optString("留言日期", "");
-                boolean added = false;
-                
-                if (!dateStr.isEmpty()) {
-                    try {
-                        // 解析日期
-                        String[] parts = dateStr.split(" ")[0].split("/");
-                        if (parts.length >= 3) {
-                            int year = Integer.parseInt(parts[0]);
-                            int month = Integer.parseInt(parts[1]);
-                            int day = Integer.parseInt(parts[2]);
-                            
-                            java.util.Calendar calendar = java.util.Calendar.getInstance();
-                            calendar.set(year, month - 1, day);
-                            long reviewTimeMs = calendar.getTimeInMillis();
-                            
-                            // 新增：顯示解析後的評論時間
-                            System.out.println("評論 #" + i + " - 日期字串: " + dateStr + ", 解析時間: " + 
-                                             new java.text.SimpleDateFormat("yyyy/MM/dd").format(new java.util.Date(reviewTimeMs)));
-                            
-                            if (currentTimeMs - reviewTimeMs <= daysInMs) {
-                                recentReviews.add(review);
-                                added = true;
-                                System.out.println("  -> 已添加到最近評論列表 (在" + days + "天範圍內)");
-                            } else {
-                                System.out.println("  -> 不在時間範圍內，跳過");
-                            }
-                        }
-                    } catch (Exception e) {
-                        // 日期解析錯誤，忽略此評論
-                        System.err.println("日期解析錯誤: " + dateStr + " - " + e.getMessage());
-                    }
-                } else if (review.has("time")) {
-                    // 處理另一種時間格式（Google Places API）
-                    long reviewTimeMs = review.getLong("time") * 1000L;
-                    
-                    // 新增：顯示時間戳解析後的評論時間
-                    System.out.println("評論 #" + i + " - 時間戳: " + review.getLong("time") + ", 解析時間: " + 
-                                     new java.text.SimpleDateFormat("yyyy/MM/dd").format(new java.util.Date(reviewTimeMs)));
-                    
-                    if (currentTimeMs - reviewTimeMs <= daysInMs) {
-                        recentReviews.add(review);
-                        added = true;
-                        System.out.println("  -> 已添加到最近評論列表 (在" + days + "天範圍內)");
-                    } else {
-                        System.out.println("  -> 不在時間範圍內，跳過");
-                    }
+        // 示例評論數據
+        String[][] reviewData;
+        if (days <= 1) {
+            // 今天的評論
+            reviewData = new String[][] {
+                {"今天", "李小姐", "4.5", "服務態度很好，餐點美味！老闆親切有禮，會再來。"},
+                {"今天", "張先生", "4.0", "食物好吃，但環境有點擁擠。"}
+            };
+        } else if (days <= 7) {
+            // 一週內的評論
+            reviewData = new String[][] {
+                {"今天", "李小姐", "4.5", "服務態度很好，餐點美味！老闆親切有禮，會再來。"},
+                {"今天", "張先生", "4.0", "食物好吃，但環境有點擁擠。"},
+                {"昨天", "王太太", "5.0", "這家店的特色料理實在太棒了，强烈推薦！"},
+                {"3天前", "林先生", "3.5", "價格有點貴，但口味不錯。"},
+                {"5天前", "陳太太", "4.0", "乾淨舒適的環境，餐點也相當美味。"}
+            };
                 } else {
-                    System.out.println("評論 #" + i + " - 無有效時間信息，跳過");
-                }
-                
-                // 新增：打印評論作者和內容摘要，幫助識別
-                if (added) {
-                    String reviewer = review.optString("評論者", review.optString("author_name", "匿名"));
-                    String commentText = review.optString("評論", review.optString("text", "無評論內容"));
-                    String shortComment = commentText.length() > 20 ? commentText.substring(0, 20) + "..." : commentText;
-                    System.out.println("  -> 評論者: " + reviewer + ", 評論: " + shortComment);
-                }
-            }
-            
-            System.out.println("符合時間範圍的評論數: " + recentReviews.size());
-            
-            // 按時間從新到舊排序評論
-            recentReviews.sort((a, b) -> {
-                long timeA = 0;
-                long timeB = 0;
-                
-                // 解析時間並比較
-                if (a.has("time") && b.has("time")) {
-                    timeA = a.getLong("time");
-                    timeB = b.getLong("time");
-                } else {
-                    // 嘗試從留言日期解析
-                    String dateStrA = a.optString("留言日期", "");
-                    String dateStrB = b.optString("留言日期", "");
-                    
-                    if (!dateStrA.isEmpty() && !dateStrB.isEmpty()) {
-                        try {
-                            String[] partsA = dateStrA.split(" ")[0].split("/");
-                            String[] partsB = dateStrB.split(" ")[0].split("/");
-                            
-                            if (partsA.length >= 3 && partsB.length >= 3) {
-                                java.util.Calendar calA = java.util.Calendar.getInstance();
-                                calA.set(Integer.parseInt(partsA[0]), Integer.parseInt(partsA[1]) - 1, Integer.parseInt(partsA[2]));
-                                
-                                java.util.Calendar calB = java.util.Calendar.getInstance();
-                                calB.set(Integer.parseInt(partsB[0]), Integer.parseInt(partsB[1]) - 1, Integer.parseInt(partsB[2]));
-                                
-                                timeA = calA.getTimeInMillis();
-                                timeB = calB.getTimeInMillis();
-                            }
-                        } catch (Exception e) {
-                            // 日期解析錯誤，不改變順序
-                        }
-                    }
-                }
-                
-                // 從新到舊排序
-                return Long.compare(timeB, timeA);
-            });
-            
-            // 添加時間範圍指示器，使用更好的樣式
-            String timeRangeText;
-            if (days == 1) {
-                timeRangeText = "最近24小時";
-            } else if (days == 7) {
-                timeRangeText = "最近一週";
-            } else if (days == 30) {
-                timeRangeText = "最近一個月";
-            } else {
-                timeRangeText = "最近" + days + "天";
-            }
-            
-            // 添加帶有圖標的時間範圍標籤
-            HBox timeRangeBox = new HBox(8);
-            timeRangeBox.setAlignment(Pos.CENTER_LEFT);
-            timeRangeBox.setPadding(new Insets(5, 0, 5, 0));
-            
-            Label clockIcon = new Label("🕒");
-            clockIcon.setStyle("-fx-text-fill: #444444; -fx-font-size: 14px;");
-            
-            Label timeRangeLabel = new Label("顯示" + timeRangeText + "的評論");
-            timeRangeLabel.setStyle("-fx-text-fill: #444444; -fx-font-size: 12px;");
-            
-            timeRangeBox.getChildren().addAll(clockIcon, timeRangeLabel);
-            recentReviewsBox.getChildren().add(timeRangeBox);
-            
-            // 添加分隔線，使用更美觀的樣式
-            Separator separator = new Separator();
-            separator.setStyle("-fx-background-color: " + PALE_DARK_YELLOW + "; -fx-opacity: 0.3;");
-            recentReviewsBox.getChildren().add(separator);
-            
-            // 沒有找到近期評論時顯示提示
-            if (recentReviews.isEmpty()) {
-                VBox noReviewsBox = new VBox(5);
-                noReviewsBox.setAlignment(Pos.CENTER);
-                noReviewsBox.setPadding(new Insets(20, 0, 20, 0));
-                
-                Label noReviewsIcon = new Label("📝");
-                noReviewsIcon.setStyle("-fx-text-fill: #666666; -fx-font-size: 24px;");
-                
-                Label noRecentReviews = new Label("沒有" + timeRangeText + "的評論");
-                noRecentReviews.setStyle("-fx-text-fill: #666666; -fx-font-style: italic; -fx-font-size: 14px;");
-                
-                noReviewsBox.getChildren().addAll(noReviewsIcon, noRecentReviews);
-                recentReviewsBox.getChildren().add(noReviewsBox);
-                return;
-            }
-            
-            // 顯示近期評論，使用更美觀的卡片樣式
-            for (JSONObject review : recentReviews) {
-                // 創建評論卡片容器
-                VBox reviewCard = new VBox(10); // 增加元素間距
-                reviewCard.setStyle("-fx-background-color: #F0F0F0; -fx-padding: 12; -fx-background-radius: 8; -fx-border-color: #D0D0D0; -fx-border-radius: 8; -fx-border-width: 1;");
-                reviewCard.setEffect(new javafx.scene.effect.DropShadow(2, 0, 1, Color.rgb(0, 0, 0, 0.1)));
-                reviewCard.setPadding(new Insets(15)); // 增加内邊距
-                // 增加卡片之間的間距，使滾動更明顯
-                VBox.setMargin(reviewCard, new Insets(10, 0, 10, 0));
-                
-                // 獲取評論數據
-                String reviewer = review.optString("評論者", review.optString("author_name", "匿名"));
-                double rating = review.optDouble("評論分數", review.optDouble("rating", 0));
-                String commentText = review.optString("評論", review.optString("text", "無評論內容"));
-                String date = review.optString("留言日期", review.optString("relative_time_description", "未知時間"));
-                
-                // 評論者頭像和名稱區域
-                HBox reviewerBox = new HBox(10);
-                reviewerBox.setAlignment(Pos.CENTER_LEFT);
-                
-                // 建立頭像
-                StackPane avatarPane = new StackPane();
-                avatarPane.setMinSize(36, 36);
-                avatarPane.setMaxSize(36, 36);
-                avatarPane.setStyle("-fx-background-color: " + RICH_MIDTONE_RED + "; -fx-background-radius: 18;");
-                
-                Label avatarLabel = new Label(reviewer.substring(0, 1).toUpperCase());
-                avatarLabel.setStyle("-fx-text-fill: white; -fx-font-weight: bold; -fx-font-size: 16px;");
-                avatarPane.getChildren().add(avatarLabel);
-                
-                // 評論者資訊區
-                VBox reviewerInfo = new VBox(2);
-                
-                Label reviewerLabel = new Label(reviewer);
-                reviewerLabel.setStyle("-fx-text-fill: #333333; -fx-font-weight: bold; -fx-font-size: 14px;");
-                
-                // 評分區域
-                Label ratingLabel = new Label(formatStars(rating));
-                ratingLabel.setStyle("-fx-text-fill: #E67649; -fx-font-size: 14px;");
-                
-                reviewerInfo.getChildren().addAll(reviewerLabel, ratingLabel);
-                
-                // 時間標籤
-                Label dateLabel = new Label(date);
-                dateLabel.setStyle("-fx-font-size: 12px; -fx-text-fill: #666666;");
-                HBox.setHgrow(reviewerInfo, Priority.ALWAYS);
-                
-                reviewerBox.getChildren().addAll(avatarPane, reviewerInfo, dateLabel);
-                
-                // 評論內容，使用標籤而非文本區域
-                Label commentLabel = new Label(commentText);
-                commentLabel.setStyle("-fx-text-fill: #333333; -fx-font-size: 13px;");
-                commentLabel.setWrapText(true);
-                commentLabel.setPrefWidth(Double.MAX_VALUE);
-                
-                // 添加到評論卡片
-                reviewCard.getChildren().addAll(reviewerBox, commentLabel);
-                
-                // 將評論卡片添加到容器
-                recentReviewsBox.getChildren().add(reviewCard);
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-            VBox errorBox = new VBox(5);
-            errorBox.setAlignment(Pos.CENTER);
-            errorBox.setPadding(new Insets(20));
-            
-            Label errorIcon = new Label("❌");
-            errorIcon.setStyle("-fx-text-fill: #E74C3C; -fx-font-size: 18px;");
-            
-            Label errorLabel = new Label("載入評論時發生錯誤");
-            errorLabel.setStyle("-fx-text-fill: #E74C3C; -fx-font-size: 14px;");
-            
-            errorBox.getChildren().addAll(errorIcon, errorLabel);
-            recentReviewsBox.getChildren().add(errorBox);
+            // 一個月內的評論
+            reviewData = new String[][] {
+                {"今天", "李小姐", "4.5", "服務態度很好，餐點美味！老闆親切有禮，會再來。"},
+                {"今天", "張先生", "4.0", "食物好吃，但環境有點擁擠。"},
+                {"昨天", "王太太", "5.0", "這家店的特色料理實在太棒了，强烈推薦！"},
+                {"3天前", "林先生", "3.5", "價格有點貴，但口味不錯。"},
+                {"5天前", "陳太太", "4.0", "乾淨舒適的環境，餐點也相當美味。"},
+                {"1週前", "黃小姐", "4.5", "服務生態度友善，餐點份量十足。"},
+                {"10天前", "吳先生", "3.0", "等待時間有點長，但食物品質還不錯。"},
+                {"2週前", "謝太太", "4.0", "適合家庭聚餐，菜單選擇多樣。"},
+                {"3週前", "鄭先生", "4.5", "食材新鮮，價格合理，推薦！"},
+                {"1個月前", "劉小姐", "5.0", "絕對是我吃過最好吃的餐廳之一，每道菜都很用心。"}
+            };
         }
+        
+        // 為每條評論創建UI元素
+        for (String[] review : reviewData) {
+            VBox reviewCard = createReviewCard(review[0], review[1], Double.parseDouble(review[2]), review[3]);
+            recentReviewsBox.getChildren().add(reviewCard);
+        }
+    }
+    
+    /**
+     * 創建評論卡片UI
+     */
+    public VBox createReviewCard(String date, String username, double rating, String content) {
+        VBox card = new VBox(5);
+        card.setStyle("-fx-background-color: #F8F8F8; -fx-padding: 10; -fx-background-radius: 5;");
+        
+        // 頂部資訊（用戶名、日期和評分）
+        HBox topInfo = new HBox(10);
+        topInfo.setAlignment(Pos.CENTER_LEFT);
+        
+        Label userLabel = new Label(username);
+        userLabel.setFont(Font.font("System", FontWeight.BOLD, 12));
+        userLabel.setStyle("-fx-text-fill: #333333;");
+        
+                Label dateLabel = new Label(date);
+        dateLabel.setStyle("-fx-text-fill: #777777; -fx-font-size: 11px;");
+        
+        Region spacer = new Region();
+        HBox.setHgrow(spacer, Priority.ALWAYS);
+        
+        // 評分顯示
+        HBox ratingBox = new HBox(2);
+        Label ratingLabel = new Label(String.format("%.1f", rating));
+        ratingLabel.setStyle("-fx-text-fill: " + RICH_MIDTONE_RED + "; -fx-font-weight: bold;");
+        
+        // 星星圖標（這裡用文字代替）
+        Label starLabel = new Label("★");
+        starLabel.setStyle("-fx-text-fill: " + RICH_MIDTONE_RED + "; -fx-font-size: 12px;");
+        
+        ratingBox.getChildren().addAll(ratingLabel, starLabel);
+        
+        topInfo.getChildren().addAll(userLabel, dateLabel, spacer, ratingBox);
+        
+        // 評論內容
+        Label contentLabel = new Label(content);
+        contentLabel.setWrapText(true);
+        contentLabel.setStyle("-fx-text-fill: #333333;");
+        
+        card.getChildren().addAll(topInfo, contentLabel);
+        return card;
     }
 
     /**
-     * 格式化星級評分
+     * 載入餐廳資料
      */
-    private String formatStars(double rating) {
-        StringBuilder stars = new StringBuilder();
-        int fullStars = (int) rating;
-        boolean halfStar = (rating - fullStars) >= 0.5;
+    public void loadRestaurantData(String jsonFilePath) {
+        loadAndDisplayRestaurantData(jsonFilePath);
+    }
+
+    /**
+     * 創建載入提示標籤
+     */
+    public Label createLoadingLabel(String message) {
+        Label label = new Label(message);
+        label.setStyle("-fx-text-fill: #777777; -fx-font-style: italic;");
+        return label;
+    }
+    
+    /**
+     * 創建信息標籤
+     */
+    public Label createInfoLabel(String message) {
+        Label label = new Label(message);
+        label.setStyle("-fx-text-fill: #555555; -fx-font-style: italic; -fx-padding: 5;");
+        return label;
+    }
+    
+    /**
+     * 創建錯誤標籤
+     */
+    public Label createErrorLabel(String message) {
+        Label label = new Label(message);
+        label.setStyle("-fx-text-fill: #E03C31; -fx-font-style: italic; -fx-padding: 5;");
+        return label;
+    }
+
+    /**
+     * 創建一個搜尋建議項元素
+     * @param name 餐廳名稱
+     * @param address 餐廳地址
+     * @return 建議項的 HBox 容器
+     */
+    private HBox createSuggestionItem(String name, String address) {
+        HBox item = new HBox(12);  // 增加間距
+        item.setPadding(new Insets(12, 15, 12, 15));  // 增加上下內邊距
+        item.setStyle("-fx-background-color: #1E1E1E; -fx-cursor: hand; -fx-border-radius: 8; -fx-background-radius: 8;");
         
-        // 填充實心星星
-        for (int i = 0; i < fullStars; i++) {
-            stars.append("★");
+        // 建立餐廳名稱標籤
+        Label nameLabel = new Label(name);
+        nameLabel.setStyle("-fx-font-weight: bold; -fx-text-fill: #FFFFFF; -fx-font-size: 14px;");  // 白色文字
+        
+        // 建立地址標籤（如果有）
+        VBox contentBox = new VBox(4);  // 增加標籤間距
+        contentBox.getChildren().add(nameLabel);
+        
+        if (address != null && !address.isEmpty()) {
+            Label addressLabel = new Label(address);
+            addressLabel.setStyle("-fx-font-size: 12px; -fx-text-fill: #AAAAAA;");  // 淺灰色
+            contentBox.getChildren().add(addressLabel);
         }
         
-        // 添加半星（如果適用）
-        if (halfStar) {
-            stars.append("½");
-        }
+        // 左側圖標 - 使用餐廳圖標
+        Label iconLabel = new Label("🍽️");  // 使用餐廳相關表情符號
+        iconLabel.setStyle("-fx-font-size: 18px; -fx-text-fill: #F08159;");  // 增大圖標並改為主題色
+        iconLabel.setPrefWidth(30);  // 增加寬度
         
-        // 填充空心星星
-        int filledStars = fullStars + (halfStar ? 1 : 0);
-        for (int i = filledStars; i < 5; i++) {
-            stars.append("☆");
-        }
+        item.getChildren().addAll(iconLabel, contentBox);
+        HBox.setHgrow(contentBox, Priority.ALWAYS);
         
-        return stars.toString();
+        // 懸停效果 - 使用更明顯的色彩和陰影
+        item.setOnMouseEntered(e -> {
+            item.setStyle("-fx-background-color: #2A2A2A; -fx-cursor: hand; " + 
+                         "-fx-effect: dropshadow(gaussian, rgba(240,129,89,0.3), 8, 0, 0, 2); " + 
+                         "-fx-border-radius: 8; -fx-background-radius: 8;");
+            nameLabel.setStyle("-fx-font-weight: bold; -fx-text-fill: #F08159; -fx-font-size: 14px;");  // 變色突顯
+        });
+        
+        item.setOnMouseExited(e -> {
+            item.setStyle("-fx-background-color: #1E1E1E; -fx-cursor: hand; -fx-border-radius: 8; -fx-background-radius: 8;");
+            nameLabel.setStyle("-fx-font-weight: bold; -fx-text-fill: #FFFFFF; -fx-font-size: 14px;");  // 恢復原色
+        });
+        
+        // 點擊效果
+        item.setOnMousePressed(e -> {
+            item.setStyle("-fx-background-color: #333333; -fx-cursor: hand; " + 
+                         "-fx-border-radius: 8; -fx-background-radius: 8;");
+        });
+        
+        item.setOnMouseReleased(e -> {
+            item.setStyle("-fx-background-color: #2A2A2A; -fx-cursor: hand; " + 
+                         "-fx-effect: dropshadow(gaussian, rgba(240,129,89,0.3), 8, 0, 0, 2); " + 
+                         "-fx-border-radius: 8; -fx-background-radius: 8;");
+        });
+        
+        return item;
+    }
+
+    /**
+     * 顯示搜尋建議
+     * @param searchResult Algolia 搜尋結果
+     * @param suggestionsBox 建議選單容器
+     * @param searchField 搜尋欄位
+     */
+    private void showSuggestions(org.json.JSONObject searchResult, VBox suggestionsBox, TextField searchField) {
+        try {
+            int hitsCount = searchResult.getInt("nbHits");
+            
+            if (hitsCount > 0) {
+                // 顯示建議選單
+                suggestionsBox.setVisible(true);
+                
+                // 取得搜尋結果
+                org.json.JSONArray hits = searchResult.getJSONArray("hits");
+                int limit = Math.min(hits.length(), 8); // 最多顯示8個建議
+                
+                // 創建建議項目
+                for (int i = 0; i < limit; i++) {
+                    org.json.JSONObject hit = hits.getJSONObject(i);
+                    String restaurantName = hit.getString("name");
+                    String address = hit.optString("address", "");
+                    
+                    // 創建建議項
+                    HBox suggestionItem = createSuggestionItem(restaurantName, address);
+                    
+                    // 設置點擊事件
+                    suggestionItem.setOnMouseClicked(event -> {
+                        searchField.setText(restaurantName);
+                        suggestionsBox.setVisible(false);
+                        handleSearch(restaurantName);
+                    });
+                    
+                    suggestionsBox.getChildren().add(suggestionItem);
+                }
+            } else {
+                suggestionsBox.setVisible(false);
+            }
+        } catch (Exception e) {
+            System.err.println("顯示搜尋建議時發生錯誤: " + e.getMessage());
+            suggestionsBox.setVisible(false);
+        }
     }
 }
 

@@ -269,7 +269,7 @@ def search_restaurants_id_in_radius(lat, lon, radius=50):
     # 使用另一個模式尋找其他可能的ID
     pattern2 = r'\["(\w+)","\d+'
     store_ids.update(re.findall(pattern2, response.text))
-    
+
     return list(store_ids)
 
 
@@ -279,7 +279,7 @@ def search_restaurants_id_in_area(center_lat, center_lon, search_radius, grid_ra
     """
     km_per_degree_lat = 111.32  # 每緯度大約距離(公里)
     km_per_degree_lon = 110.57 * math.cos(math.radians(center_lat))  # 在當前緯度下每經度大約距離(公里)
-    
+
     lat_range = search_radius / km_per_degree_lat
     lon_range = search_radius / km_per_degree_lon
     

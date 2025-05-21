@@ -30,6 +30,9 @@ dependencies {
     // 測試函式庫 (可選，但建議加入)
     testImplementation 'org.junit.jupiter:junit-jupiter-api:5.9.2'
     testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.9.2'
+
+    // 添加 JSON 庫依賴
+    implementation files('libs/json-20230227.jar')
 }
 
 application {
@@ -38,6 +41,12 @@ application {
     //mainClass = 'bigproject.compare'  // 原本的主類別
     //mainClass = 'bigproject.AnimationDemo'  // 動畫示範類別
     mainClass = 'bigproject.AppLauncher'  // 啟動器類別
+    
+    // 定義可執行的應用程式
+    applicationName = 'RestaurantAnalyzer'
+    
+    // 定義多個應用程式目標
+    executableDir = 'bin'
     
     // 添加 JVM 參數
     applicationDefaultJvmArgs = [
