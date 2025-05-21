@@ -47,4 +47,4 @@ ENV/
 *.tmp
 
 # JSON data (如果太大且屬於測試數據，可考慮排除)
-# *.json 
+# *.json src/main/resources/firebase/Firebase_Admin_SDK.json
