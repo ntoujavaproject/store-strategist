@@ -180,10 +180,28 @@ public class UIManager {
     }
 
     public void updateFontStyle(String fontFamily, double fontSize) {
-        String style = String.format("-fx-font-family: \"%s\"; -fx-font-size: %.1fpt;",
+        // 先保存當前的樣式
+        String currentStyle = mainLayout.getStyle();
+        
+        // 創建字體樣式
+        String fontStyle = String.format("-fx-font-family: \"%s\"; -fx-font-size: %.1fpt;",
                                    fontFamily.replace("\"", ""), fontSize);
-        mainLayout.setStyle(style);
-        System.out.println("Applied style: " + style);
+        
+        // 檢查是否存在背景圖片設置
+        if (currentStyle != null && currentStyle.contains("-fx-background-image")) {
+            // 保留背景圖片和其他設置，但更新字體設置
+            // 移除任何現有的字體設置
+            String styleWithoutFont = currentStyle.replaceAll("-fx-font-family:[^;]+;", "")
+                                                 .replaceAll("-fx-font-size:[^;]+;", "");
+            
+            // 添加新的字體設置
+            mainLayout.setStyle(styleWithoutFont + " " + fontStyle);
+        } else {
+            // 如果沒有背景圖片設置，直接設置字體樣式
+            mainLayout.setStyle(fontStyle);
+        }
+        
+        System.out.println("Applied font style: " + fontStyle);
     }
 
     public void updateTheme(boolean useDarkMode) {

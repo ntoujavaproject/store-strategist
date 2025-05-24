@@ -139,17 +139,17 @@ public class RightPanel extends VBox {
     }
     
     /**
-     * 初始化資料來源區域
+     * 初始化競爭對手區域
      */
     private void initializeSourcesSection() {
-        Label sourcesLabel = new Label("資料來源");
+        Label sourcesLabel = new Label("競爭對手");
         sourcesLabel.setFont(Font.font("System", FontWeight.BOLD, 16));
         sourcesLabel.setStyle("-fx-text-fill: " + PALE_DARK_YELLOW + ";");
         
         competitorListVBox = new VBox(5);
         competitorListVBox.setPadding(new Insets(5, 0, 0, 0));
-        competitorListVBox.getChildren().add(createCompetitorEntry("Haidai Roast Shop", "Haidai Roast Shop.json"));
-        competitorListVBox.getChildren().add(createCompetitorEntry("Sea Side Eatery", "Sea Side Eatery Info.json"));
+        competitorListVBox.getChildren().add(createCompetitorEntry("海大燒臘", "reviews_data/海大燒臘_reviews.json"));
+        competitorListVBox.getChildren().add(createCompetitorEntry("海那邊小食堂", "reviews_data/海那邊小食堂_reviews.json"));
         
         getChildren().addAll(sourcesLabel, competitorListVBox);
     }
@@ -330,8 +330,8 @@ public class RightPanel extends VBox {
         showOnMapButton.setOnAction(e -> {
             System.out.println("Map Button clicked for: " + displayName);
             String mapQuery = displayName;
-            if ("Haidai Roast Shop".equals(displayName)) mapQuery = "海大燒臘";
-            else if ("Sea Side Eatery".equals(displayName)) mapQuery = "海那邊小食堂 基隆";
+            if ("海大燒臘".equals(displayName)) mapQuery = "海大燒臘";
+            else if ("海那邊小食堂".equals(displayName)) mapQuery = "海那邊小食堂 基隆";
             parentComponent.openMapInBrowser(mapQuery);
         });
 
@@ -637,7 +637,7 @@ public class RightPanel extends VBox {
     }
     
     /**
-     * 設置當前顯示的餐廳JSON檔案
+     * 設置當前JSON檔案路徑
      */
     public void setCurrentJsonFilePath(String jsonFilePath) {
         this.currentJsonFilePath = jsonFilePath;

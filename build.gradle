@@ -10,7 +10,7 @@ repositories {
 
 // 配置JavaFX
 javafx {
-    version = '17.0.15' // 嘗試用回 JavaFX 17 的最新版
+    version = '21.0.1' // 更新為更新的穩定版本
     modules = ['javafx.controls', 'javafx.fxml', 'javafx.swing', 'javafx.graphics', 'javafx.base']
     // Classifier logic removed - handled by plugin or dependencies
 }
