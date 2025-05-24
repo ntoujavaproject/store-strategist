@@ -10,6 +10,13 @@ from review import Review
 
 class Restaurant:
     def __init__(self, id, name, address):
+        '''
+        初始化餐廳物件
+        Args:
+            id (str): 餐廳的唯一識別碼
+            name (str): 餐廳名稱
+            address (str): 餐廳地址
+        '''
         self.id = id
         self.name = name
         self.address = address
@@ -18,14 +25,18 @@ class Restaurant:
 
     def get_reviews(self, page_count=2000, sorted_by=2):
         '''
-        sorted_by 參數對應：
-        1 - 最相關 (Most Relevant)
-        2 - 最新 (Newest)
-        3 - 評分最高 (Highest Rating)
-        4 - 評分最低 (Lowest Rating)
+        從 Google Maps 抓取餐廳評論資料
+        
+        Args:
+            page_count (int, optional): 要抓取的頁數上限。預設為 2000
+            sorted_by (int, optional): 評論排序方式。預設為 2 (最新)
+                1 - 最相關 (Most Relevant)
+                2 - 最新 (Newest)
+                3 - 評分最高 (Highest Rating)
+                4 - 評分最低 (Lowest Rating)
         
         每個 page 會有10筆資料，除非評論數未達10筆
-
+        評論資料會被儲存在 self.reviews 列表中
         '''
         next_token = ""
         comment_list = []
@@ -114,6 +125,14 @@ class Restaurant:
         return
 
     def upload_to_firestore(self):
+        '''
+        上傳餐廳資料到 Firestore
+        
+        會嘗試上傳餐廳基本資料和評論資料
+        如果上傳失敗會重試最多5次
+        每次重試的間隔時間會以指數增加
+        成功上傳後會將 is_upload 設為 True
+        '''
         retries = 5
         for attempt in range(retries):
             try:
@@ -130,6 +149,16 @@ class Restaurant:
                     print(f"上傳失敗：{e}")
 
     def upload_res(self):
+        '''
+        上傳餐廳基本資料到 Firestore
+        
+        上傳的資料包含：
+        - 餐廳名稱
+        - 餐廳地址
+        - 餐廳ID
+        
+        如果上傳失敗會重試一次
+        '''
         retries = 2
         for attempt in range(retries):
             try:
@@ -161,6 +190,18 @@ class Restaurant:
                     print(f"發生錯誤：{e}")
 
     def upload_review(self):
+        '''
+        批量上傳餐廳評論資料到 Firestore
+        
+        上傳的評論資料包含：
+        - 評論者資訊（名稱、狀態、ID、評論數、照片數）
+        - 評論內容（星級、評論文字、照片URL）
+        - 用餐資訊（服務類型、用餐類型、消費金額）
+        - 評分詳情（食物、服務、氣氛分數）
+        - 評論日期時間
+        
+        使用批次寫入方式，一次上傳所有評論
+        '''
         try:
             url = f"https://firestore.googleapis.com/v1/projects/{project_id}/databases/(default)/documents:commit"
             writes = []

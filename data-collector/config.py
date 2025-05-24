@@ -1,6 +1,6 @@
 center_lat = 25.1494729
 center_lon = 121.7641153
-search_radius = 10
+search_radius = 2000
 
 project_id = "java2025-91d74"
 comment_url = "https://www.google.com.tw/maps/rpc/listugcposts"
