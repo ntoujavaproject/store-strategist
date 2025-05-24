@@ -1103,8 +1103,8 @@ public class compare extends Application implements UIManager.StateChangeListene
                             }
                             
                         } else {
-                            // 如果 Algolia 沒有結果，嘗試使用 data-collector 直接搜尋 Google Maps
-                            collectRestaurantDataFromGoogleMaps(trimmedQuery);
+                            // 如果 Algolia 沒有結果，詢問使用者是否要收集並上傳餐廳資料
+                            showRestaurantNotFoundDialog(trimmedQuery);
                         }
                     });
                     
@@ -1171,6 +1171,141 @@ public class compare extends Application implements UIManager.StateChangeListene
                 Platform.runLater(() -> {
                     clearRestaurantDataDisplay("收集資料時發生錯誤：" + e.getMessage());
                     SearchBar.openMapInBrowser(restaurantName);
+                });
+            }
+        }).start();
+    }
+    
+    /**
+     * 顯示餐廳未找到對話框，詢問使用者是否要自動收集
+     */
+    private void showRestaurantNotFoundDialog(String query) {
+        Platform.runLater(() -> {
+            clearRestaurantDataDisplay("在資料庫中找不到「" + query + "」");
+            
+            // 創建對話框
+            javafx.scene.control.Alert alert = new javafx.scene.control.Alert(javafx.scene.control.Alert.AlertType.CONFIRMATION);
+            alert.setTitle("餐廳未找到");
+            alert.setHeaderText("在餐廳資料庫中找不到「" + query + "」");
+            alert.setContentText("是否要自動從 Google Maps 收集此餐廳的資料並加入資料庫？\n\n" +
+                                "收集完成後，餐廳資料將會自動上傳到 Firebase，" +
+                                "之後就可以直接搜尋到了。");
+            
+            // 自定義按鈕
+            javafx.scene.control.ButtonType collectButton = new javafx.scene.control.ButtonType("收集資料");
+            javafx.scene.control.ButtonType openMapButton = new javafx.scene.control.ButtonType("在地圖中開啟");
+            javafx.scene.control.ButtonType cancelButton = new javafx.scene.control.ButtonType("取消", javafx.scene.control.ButtonBar.ButtonData.CANCEL_CLOSE);
+            
+            alert.getButtonTypes().setAll(collectButton, openMapButton, cancelButton);
+            
+            // 設置對話框樣式
+            alert.getDialogPane().setStyle("-fx-background-color: #2C2C2C; -fx-text-fill: white;");
+            
+            // 顯示對話框並處理用戶選擇
+            java.util.Optional<javafx.scene.control.ButtonType> result = alert.showAndWait();
+            
+            if (result.isPresent()) {
+                if (result.get() == collectButton) {
+                    // 用戶選擇收集資料
+                    collectAndUploadRestaurantToFirebase(query);
+                } else if (result.get() == openMapButton) {
+                    // 用戶選擇在地圖中開啟
+                    SearchBar.openMapInBrowser(query);
+                }
+                // 如果是取消，則不做任何事
+            }
+        });
+    }
+    
+    /**
+     * 收集餐廳資料並上傳到 Firebase
+     */
+    private void collectAndUploadRestaurantToFirebase(String query) {
+        Platform.runLater(() -> {
+            clearRestaurantDataDisplay("正在從 Google Maps 收集「" + query + "」的資料...");
+        });
+        
+        new Thread(() -> {
+            try {
+                // 使用 search_res_by_name_upload_firebase.py 腳本
+                String[] command = {
+                    "python", 
+                    "data-collector/search_res_by_name_upload_firebase.py", 
+                    query
+                };
+                
+                ProcessBuilder pb = new ProcessBuilder(command);
+                pb.directory(new File("."));
+                pb.redirectErrorStream(true);
+                
+                Platform.runLater(() -> {
+                    clearRestaurantDataDisplay("正在收集並上傳「" + query + "」到 Firebase...");
+                });
+                
+                Process process = pb.start();
+                
+                // 讀取輸出以獲得進度信息
+                try (java.io.BufferedReader reader = new java.io.BufferedReader(
+                        new java.io.InputStreamReader(process.getInputStream()))) {
+                    String line;
+                    while ((line = reader.readLine()) != null) {
+                        final String outputLine = line;
+                        Platform.runLater(() -> {
+                            System.out.println("Data collection: " + outputLine);
+                        });
+                    }
+                }
+                
+                int exitCode = process.waitFor();
+                
+                if (exitCode == 0) {
+                    Platform.runLater(() -> {
+                        clearRestaurantDataDisplay("「" + query + "」已成功加入資料庫！");
+                        
+                        // 顯示成功對話框
+                        javafx.scene.control.Alert successAlert = new javafx.scene.control.Alert(javafx.scene.control.Alert.AlertType.INFORMATION);
+                        successAlert.setTitle("上傳成功");
+                        successAlert.setHeaderText("餐廳資料已成功加入資料庫");
+                        successAlert.setContentText("「" + query + "」的資料已經成功收集並上傳到 Firebase。\n\n" +
+                                                   "現在您可以重新搜尋這家餐廳了！");
+                        successAlert.getDialogPane().setStyle("-fx-background-color: #2C2C2C; -fx-text-fill: white;");
+                        
+                        successAlert.showAndWait().ifPresent(response -> {
+                            // 自動重新搜尋
+                            handleSearch(query);
+                        });
+                    });
+                } else {
+                    Platform.runLater(() -> {
+                        clearRestaurantDataDisplay("收集「" + query + "」的資料時發生錯誤");
+                        
+                        // 顯示錯誤對話框
+                        javafx.scene.control.Alert errorAlert = new javafx.scene.control.Alert(javafx.scene.control.Alert.AlertType.WARNING);
+                        errorAlert.setTitle("收集失敗");
+                        errorAlert.setHeaderText("無法收集餐廳資料");
+                        errorAlert.setContentText("無法從 Google Maps 找到「" + query + "」的資料，\n" +
+                                                 "請確認餐廳名稱是否正確，或嘗試使用更精確的關鍵字。\n\n" +
+                                                 "您也可以選擇在 Google Maps 中手動搜尋。");
+                        errorAlert.getDialogPane().setStyle("-fx-background-color: #2C2C2C; -fx-text-fill: white;");
+                        
+                        // 添加在地圖中開啟的按鈕
+                        javafx.scene.control.ButtonType openMapBtn = new javafx.scene.control.ButtonType("在地圖中開啟");
+                        javafx.scene.control.ButtonType okBtn = new javafx.scene.control.ButtonType("確定", javafx.scene.control.ButtonBar.ButtonData.OK_DONE);
+                        errorAlert.getButtonTypes().setAll(openMapBtn, okBtn);
+                        
+                        errorAlert.showAndWait().ifPresent(response -> {
+                            if (response == openMapBtn) {
+                                SearchBar.openMapInBrowser(query);
+                            }
+                        });
+                    });
+                }
+                
+            } catch (Exception e) {
+                e.printStackTrace();
+                Platform.runLater(() -> {
+                    clearRestaurantDataDisplay("收集資料時發生錯誤：" + e.getMessage());
+                    SearchBar.openMapInBrowser(query);
                 });
             }
         }).start();
