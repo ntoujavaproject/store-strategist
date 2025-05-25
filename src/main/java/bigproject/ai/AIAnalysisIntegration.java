@@ -93,7 +93,7 @@ public class AIAnalysisIntegration {
             }
             
             // 確保模型已下載
-            boolean modelAvailable = OllamaAPI.ensureModelAvailable("llama3").get();
+            boolean modelAvailable = OllamaAPI.ensureModelAvailable("gemma3:4b").get();
             if (!modelAvailable) {
                 System.out.println("Ollama模型不可用，使用內置分析功能");
                 return false;

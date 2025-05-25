@@ -154,4 +154,16 @@ task createDistribution(dependsOn: ['jar', 'createExecutableJar']) {
         
         println "Distribution created at ${distDir.absolutePath}"
     }
+}
+
+task runAnalyzer(type: JavaExec) {
+    group = 'application'
+    description = 'Run FirestoreRestaurantAnalyzer'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'bigproject.ai.FirestoreRestaurantAnalyzer'
+    
+    // 允許從命令行傳遞參數
+    if (project.hasProperty('args')) {
+        args project.property('args').split(' ')
+    }
 } 

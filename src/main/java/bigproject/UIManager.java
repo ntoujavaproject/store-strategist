@@ -1,5 +1,6 @@
 package bigproject;
 
+import javafx.application.Platform;
 import javafx.embed.swing.SwingFXUtils;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -11,6 +12,9 @@ import javafx.scene.chart.NumberAxis;
 import javafx.scene.chart.XYChart;
 import javafx.scene.control.*;
 import javafx.scene.control.ScrollPane.ScrollBarPolicy;
+import javafx.animation.Timeline;
+import javafx.animation.KeyFrame;
+import javafx.util.Duration;
 import javafx.scene.image.WritableImage;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
@@ -33,6 +37,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Random;
+import java.util.function.Consumer;
 import java.util.prefs.Preferences;
 
 public class UIManager {
@@ -58,20 +63,35 @@ public class UIManager {
     // Flag to track if suggestions view is showing
     private boolean isSuggestionsShowing = false;
     
+    // Flag to track if restaurant not found view is showing
+    private boolean isRestaurantNotFoundShowing = false;
+    
     // Interface for state change callbacks
     public interface StateChangeListener {
         void onMonthlyReportStateChanged(boolean isShowing);
         void onSuggestionsStateChanged(boolean isShowing);
         void onSettingsStateChanged(boolean isShowing);
+        void onRestaurantNotFoundStateChanged(boolean isShowing);
     }
     
     private StateChangeListener stateChangeListener;
+    private Consumer<String> fullNameCollectCallback;
+    private ProgressBar dataCollectionProgressBar;
+    private Label dataCollectionStatusLabel;
+    private VBox dataCollectionView;
     
     /**
      * Sets a listener to be notified of state changes
      */
     public void setStateChangeListener(StateChangeListener listener) {
         this.stateChangeListener = listener;
+    }
+    
+    /**
+     * Sets a callback to handle full restaurant name collection
+     */
+    public void setFullNameCollectCallback(Consumer<String> callback) {
+        this.fullNameCollectCallback = callback;
     }
 
     public UIManager(Preferences prefs, Stage primaryStage, Scene mainScene, BorderPane mainLayout, Node mainCenterView) {
@@ -506,6 +526,327 @@ public class UIManager {
         // Ensure margin is set correctly if needed, though HBox structure might make this less critical
         // BorderPane.setMargin(suggestionsScrollPane, new Insets(0, 15, 0, 0)); 
         System.out.println("Switched to Suggestions View");
+    }
+
+    /**
+     * Returns whether the restaurant not found view is currently showing
+     */
+    public boolean isRestaurantNotFoundShowing() {
+        return isRestaurantNotFoundShowing;
+    }
+
+    /**
+     * Shows the restaurant not found view with collection options
+     */
+    public void showRestaurantNotFoundView(String query, Runnable collectAction, Runnable openMapAction) {
+        showRestaurantNotFoundView(query, null, collectAction, openMapAction);
+    }
+
+    /**
+     * Shows the restaurant not found view with collection options and found restaurant info
+     */
+    public void showRestaurantNotFoundView(String query, String foundRestaurantName, Runnable collectAction, Runnable openMapAction) {
+        VBox notFoundContent = new VBox(20);
+        notFoundContent.setId("restaurant-not-found-content");
+        notFoundContent.setPadding(new Insets(40));
+        notFoundContent.setAlignment(Pos.CENTER);
+
+        // 標題
+        Label titleLabel = new Label("餐廳未找到");
+        titleLabel.setFont(Font.font("System", FontWeight.BOLD, 24));
+        titleLabel.getStyleClass().add("label-bright");
+        titleLabel.setStyle("-fx-text-fill: #E67649;");
+
+        // 主要信息
+        Label messageLabel = new Label(String.format("在餐廳資料庫中找不到「%s」", query));
+        messageLabel.setFont(Font.font("System", FontWeight.NORMAL, 16));
+        messageLabel.getStyleClass().add("label-bright");
+        messageLabel.setWrapText(true);
+        messageLabel.setTextAlignment(javafx.scene.text.TextAlignment.CENTER);
+
+        // 說明文字
+        Label descriptionLabel = new Label("由於搜尋詞可能不夠完整，建議您：");
+        descriptionLabel.setFont(Font.font("System", FontWeight.NORMAL, 14));
+        descriptionLabel.getStyleClass().add("label-bright");
+        descriptionLabel.setWrapText(true);
+
+        // 建議步驟
+        VBox stepsBox = new VBox(8);
+        stepsBox.setAlignment(Pos.CENTER_LEFT);
+        stepsBox.setStyle("-fx-background-color: rgba(220, 242, 204, 0.6); -fx-padding: 15; -fx-background-radius: 8;");
+        
+        Label step1 = new Label("1. 到 Google Maps 搜尋該餐廳");
+        step1.setStyle("-fx-text-fill: #2E7D32; -fx-font-weight: bold;");
+        
+        Label step2 = new Label("2. 複製完整的餐廳名稱（例如：八方雲集 新竹金山店）");
+        step2.setStyle("-fx-text-fill: #2E7D32; -fx-font-weight: bold;");
+        
+        Label step3 = new Label("3. 返回本系統，用完整名稱重新搜尋");
+        step3.setStyle("-fx-text-fill: #2E7D32; -fx-font-weight: bold;");
+        
+        Label tip = new Label("💡 提示：完整名稱通常包含分店資訊，可幫助系統精確找到餐廳");
+        tip.setStyle("-fx-text-fill: #1976D2; -fx-font-style: italic;");
+        tip.setWrapText(true);
+        
+        stepsBox.getChildren().addAll(step1, step2, step3, tip);
+
+        // 收集資料選項
+        VBox collectOption = new VBox(12);
+        collectOption.setAlignment(Pos.CENTER);
+        collectOption.setStyle("-fx-background-color: rgba(255, 235, 210, 0.8); -fx-padding: 20; -fx-background-radius: 10;");
+        
+        Label collectTitle = new Label("📋 檢查資料庫並收集");
+        collectTitle.setFont(Font.font("System", FontWeight.BOLD, 16));
+        collectTitle.setStyle("-fx-text-fill: #F57C00;");
+        
+        Label collectDesc = new Label("請輸入完整的餐廳名稱（包含分店資訊）：");
+        collectDesc.setWrapText(true);
+        collectDesc.setStyle("-fx-text-fill: #F57C00; -fx-font-weight: bold;");
+        
+        // 添加輸入欄位
+        TextField restaurantNameField = new TextField();
+        restaurantNameField.setPromptText("例如：八方雲集 新竹金山店");
+        restaurantNameField.setPrefWidth(300);
+        restaurantNameField.setStyle("-fx-font-size: 14px; -fx-padding: 8;");
+        
+        Label inputTip = new Label("💡 請從 Google Maps 複製完整名稱貼上");
+        inputTip.setStyle("-fx-text-fill: #666666; -fx-font-size: 12px; -fx-font-style: italic;");
+        
+        Button collectButton = new Button("檢查並上傳餐廳資料");
+        collectButton.setStyle("-fx-background-color: #FF9800; -fx-text-fill: white; -fx-font-size: 14px; -fx-padding: 10 20; -fx-background-radius: 8;");
+        collectButton.setOnAction(e -> {
+            String fullRestaurantName = restaurantNameField.getText().trim();
+            if (fullRestaurantName.isEmpty()) {
+                // 顯示提示
+                Label errorLabel = new Label("⚠️ 請輸入餐廳名稱");
+                errorLabel.setStyle("-fx-text-fill: #D32F2F; -fx-font-weight: bold;");
+                if (!collectOption.getChildren().contains(errorLabel)) {
+                    collectOption.getChildren().add(collectOption.getChildren().size() - 1, errorLabel);
+                    // 使用簡單的線程來移除錯誤提示
+                    new Thread(() -> {
+                        try {
+                            Thread.sleep(3000);
+                            javafx.application.Platform.runLater(() -> {
+                                collectOption.getChildren().remove(errorLabel);
+                            });
+                        } catch (InterruptedException ignored) {}
+                    }).start();
+                }
+                return;
+            }
+            
+            if (collectAction != null) {
+                // 使用回調介面，讓 compare.java 處理完整名稱的收集
+                if (fullNameCollectCallback != null) {
+                    fullNameCollectCallback.accept(fullRestaurantName);
+                }
+            }
+        });
+        
+        collectOption.getChildren().addAll(collectTitle, collectDesc, restaurantNameField, inputTip, collectButton);
+
+        // 地圖開啟選項
+        VBox mapOption = new VBox(10);
+        mapOption.setAlignment(Pos.CENTER);
+        mapOption.setStyle("-fx-background-color: rgba(220, 242, 204, 0.8); -fx-padding: 20; -fx-background-radius: 10;");
+        
+        Label mapTitle = new Label("🗺️ 到 Google Maps 查看");
+        mapTitle.setFont(Font.font("System", FontWeight.BOLD, 16));
+        mapTitle.setStyle("-fx-text-fill: #2E7D32;");
+        
+        Label mapDesc = new Label("開啟 Google Maps 搜尋該餐廳，\n找到完整名稱後複製回來重新搜尋。");
+        mapDesc.setWrapText(true);
+        mapDesc.setStyle("-fx-text-fill: #2E7D32;");
+        
+        Button mapButton = new Button("開啟 Google Maps");
+        mapButton.setStyle("-fx-background-color: #4CAF50; -fx-text-fill: white; -fx-font-size: 14px; -fx-padding: 10 20; -fx-background-radius: 8;");
+        mapButton.setOnAction(e -> {
+            if (openMapAction != null) {
+                openMapAction.run();
+            }
+        });
+        
+        mapOption.getChildren().addAll(mapTitle, mapDesc, mapButton);
+
+        // 返回按鈕
+        Button backButton = new Button("返回主畫面");
+        backButton.setStyle("-fx-background-color: #757575; -fx-text-fill: white; -fx-font-size: 14px; -fx-padding: 10 20; -fx-background-radius: 8;");
+        backButton.setOnAction(e -> {
+            showMainView();
+            isRestaurantNotFoundShowing = false;
+            if (stateChangeListener != null) {
+                stateChangeListener.onRestaurantNotFoundStateChanged(false);
+            }
+        });
+
+        // 按鈕懸停效果
+        collectButton.setOnMouseEntered(e -> collectButton.setStyle("-fx-background-color: #45A049; -fx-text-fill: white; -fx-font-size: 14px; -fx-padding: 10 20; -fx-background-radius: 8;"));
+        collectButton.setOnMouseExited(e -> collectButton.setStyle("-fx-background-color: #4CAF50; -fx-text-fill: white; -fx-font-size: 14px; -fx-padding: 10 20; -fx-background-radius: 8;"));
+        
+        mapButton.setOnMouseEntered(e -> mapButton.setStyle("-fx-background-color: #F57C00; -fx-text-fill: white; -fx-font-size: 14px; -fx-padding: 10 20; -fx-background-radius: 8;"));
+        mapButton.setOnMouseExited(e -> mapButton.setStyle("-fx-background-color: #FF9800; -fx-text-fill: white; -fx-font-size: 14px; -fx-padding: 10 20; -fx-background-radius: 8;"));
+        
+        backButton.setOnMouseEntered(e -> backButton.setStyle("-fx-background-color: #616161; -fx-text-fill: white; -fx-font-size: 14px; -fx-padding: 10 20; -fx-background-radius: 8;"));
+        backButton.setOnMouseExited(e -> backButton.setStyle("-fx-background-color: #757575; -fx-text-fill: white; -fx-font-size: 14px; -fx-padding: 10 20; -fx-background-radius: 8;"));
+
+        // 選項容器
+        HBox optionsBox = new HBox(30);
+        optionsBox.setAlignment(Pos.CENTER);
+        optionsBox.getChildren().addAll(collectOption, mapOption);
+
+        notFoundContent.getChildren().addAll(titleLabel, messageLabel, descriptionLabel, stepsBox, optionsBox, backButton);
+
+        ScrollPane notFoundScrollPane = new ScrollPane(notFoundContent);
+        notFoundScrollPane.setFitToWidth(true);
+        notFoundScrollPane.setHbarPolicy(ScrollBarPolicy.NEVER);
+        notFoundScrollPane.setStyle("-fx-background-color: rgba(247, 232, 221, 0.9); -fx-border-color: transparent;");
+
+        mainLayout.setCenter(notFoundScrollPane);
+        isRestaurantNotFoundShowing = true;
+        
+        // 確保其他視圖被關閉
+        isMonthlyReportShowing = false;
+        isSuggestionsShowing = false;
+        
+        if (stateChangeListener != null) {
+            stateChangeListener.onRestaurantNotFoundStateChanged(true);
+            stateChangeListener.onMonthlyReportStateChanged(false);
+            stateChangeListener.onSuggestionsStateChanged(false);
+        }
+        
+        System.out.println("Switched to Restaurant Not Found View for: " + query);
+    }
+
+    /**
+     * 顯示資料收集進度視圖
+     */
+    public void showDataCollectionProgressView(String restaurantName) {
+        dataCollectionView = new VBox(20);
+        dataCollectionView.setId("data-collection-progress-content");
+        dataCollectionView.setPadding(new Insets(40));
+        dataCollectionView.setAlignment(Pos.CENTER);
+
+        // 標題
+        Label titleLabel = new Label("正在收集餐廳資料");
+        titleLabel.setFont(Font.font("System", FontWeight.BOLD, 24));
+        titleLabel.getStyleClass().add("label-bright");
+        titleLabel.setStyle("-fx-text-fill: #E67649;");
+
+        // 餐廳名稱
+        Label restaurantLabel = new Label("餐廳：" + restaurantName);
+        restaurantLabel.setFont(Font.font("System", FontWeight.NORMAL, 16));
+        restaurantLabel.getStyleClass().add("label-bright");
+        restaurantLabel.setWrapText(true);
+        restaurantLabel.setTextAlignment(javafx.scene.text.TextAlignment.CENTER);
+
+        // 進度條
+        dataCollectionProgressBar = new ProgressBar(0.0);
+        dataCollectionProgressBar.setPrefWidth(400);
+        dataCollectionProgressBar.setPrefHeight(20);
+        dataCollectionProgressBar.setStyle("-fx-accent: #4CAF50;");
+
+        // 狀態標籤
+        dataCollectionStatusLabel = new Label("準備開始...");
+        dataCollectionStatusLabel.setFont(Font.font("System", FontWeight.NORMAL, 14));
+        dataCollectionStatusLabel.getStyleClass().add("label-bright");
+        dataCollectionStatusLabel.setWrapText(true);
+        dataCollectionStatusLabel.setTextAlignment(javafx.scene.text.TextAlignment.CENTER);
+
+        // 進度訊息容器
+        VBox progressContainer = new VBox(10);
+        progressContainer.setAlignment(Pos.CENTER);
+        progressContainer.setStyle("-fx-background-color: rgba(220, 242, 204, 0.8); -fx-padding: 20; -fx-background-radius: 10;");
+        progressContainer.getChildren().addAll(dataCollectionProgressBar, dataCollectionStatusLabel);
+
+        // 提示訊息
+        Label tipLabel = new Label("請等待資料收集完成，過程中請勿關閉應用程式");
+        tipLabel.setFont(Font.font("System", FontWeight.NORMAL, 12));
+        tipLabel.setStyle("-fx-text-fill: #666666; -fx-font-style: italic;");
+        tipLabel.setWrapText(true);
+        tipLabel.setTextAlignment(javafx.scene.text.TextAlignment.CENTER);
+
+        dataCollectionView.getChildren().addAll(titleLabel, restaurantLabel, progressContainer, tipLabel);
+
+        ScrollPane progressScrollPane = new ScrollPane(dataCollectionView);
+        progressScrollPane.setFitToWidth(true);
+        progressScrollPane.setHbarPolicy(ScrollBarPolicy.NEVER);
+        progressScrollPane.setStyle("-fx-background-color: rgba(247, 232, 221, 0.9); -fx-border-color: transparent;");
+
+        mainLayout.setCenter(progressScrollPane);
+        
+        System.out.println("Switched to Data Collection Progress View for: " + restaurantName);
+    }
+
+    /**
+     * 更新資料收集進度
+     */
+    public void updateDataCollectionProgress(double progress, String statusMessage) {
+        Platform.runLater(() -> {
+            if (dataCollectionProgressBar != null) {
+                dataCollectionProgressBar.setProgress(progress);
+            }
+            if (dataCollectionStatusLabel != null) {
+                dataCollectionStatusLabel.setText(statusMessage);
+            }
+        });
+    }
+
+    /**
+     * 顯示資料收集完成視圖
+     */
+    public void showDataCollectionCompleteView(String restaurantName, boolean success, String message) {
+        Platform.runLater(() -> {
+            if (dataCollectionView == null) return;
+
+            // 清除現有內容
+            dataCollectionView.getChildren().clear();
+
+            // 標題
+            Label titleLabel = new Label(success ? "資料收集完成！" : "資料收集失敗");
+            titleLabel.setFont(Font.font("System", FontWeight.BOLD, 24));
+            titleLabel.setStyle("-fx-text-fill: " + (success ? "#4CAF50" : "#D32F2F") + ";");
+
+            // 餐廳名稱
+            Label restaurantLabel = new Label("餐廳：" + restaurantName);
+            restaurantLabel.setFont(Font.font("System", FontWeight.NORMAL, 16));
+            restaurantLabel.getStyleClass().add("label-bright");
+            restaurantLabel.setWrapText(true);
+
+            // 結果訊息
+            Label messageLabel = new Label(message);
+            messageLabel.setFont(Font.font("System", FontWeight.NORMAL, 14));
+            messageLabel.getStyleClass().add("label-bright");
+            messageLabel.setWrapText(true);
+            messageLabel.setTextAlignment(javafx.scene.text.TextAlignment.CENTER);
+
+            // 結果容器
+            VBox resultContainer = new VBox(10);
+            resultContainer.setAlignment(Pos.CENTER);
+            resultContainer.setStyle("-fx-background-color: rgba(" + 
+                (success ? "220, 242, 204" : "255, 235, 238") + ", 0.8); -fx-padding: 20; -fx-background-radius: 10;");
+            resultContainer.getChildren().addAll(messageLabel);
+
+            // 操作按鈕
+            HBox buttonBox = new HBox(15);
+            buttonBox.setAlignment(Pos.CENTER);
+
+            if (success) {
+                Button searchButton = new Button("重新搜尋餐廳");
+                searchButton.setStyle("-fx-background-color: #4CAF50; -fx-text-fill: white; -fx-font-size: 14px; -fx-padding: 10 20; -fx-background-radius: 8;");
+                searchButton.setOnAction(e -> {
+                    showMainView();
+                    // 這裡可以觸發重新搜尋
+                });
+                buttonBox.getChildren().add(searchButton);
+            }
+
+            Button backButton = new Button("返回主畫面");
+            backButton.setStyle("-fx-background-color: #757575; -fx-text-fill: white; -fx-font-size: 14px; -fx-padding: 10 20; -fx-background-radius: 8;");
+            backButton.setOnAction(e -> showMainView());
+            buttonBox.getChildren().add(backButton);
+
+            dataCollectionView.getChildren().addAll(titleLabel, restaurantLabel, resultContainer, buttonBox);
+        });
     }
 
     public void showMainView() {

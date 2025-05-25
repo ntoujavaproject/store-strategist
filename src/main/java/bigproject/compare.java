@@ -96,6 +96,7 @@ import javafx.scene.input.ScrollEvent;
 
 import bigproject.RightPanel;
 import bigproject.SearchBar;  // 添加 SearchBar 引用
+import bigproject.ai.AIProgressDialog;
 
 /**
  * 餐廳市場分析系統主應用程式
@@ -548,6 +549,7 @@ public class compare extends Application implements UIManager.StateChangeListene
         
         // Set this class as the state change listener
         uiManager.setStateChangeListener(this);
+        uiManager.setFullNameCollectCallback(this::collectAndUploadRestaurantToFirebase); // 設置完整名稱收集回調
         preferencesManager.setStateChangeListener(this);
 
         // --- Update font style using UIManager ---
@@ -1050,6 +1052,13 @@ public class compare extends Application implements UIManager.StateChangeListene
                     if (tabBar.getChildren().size() > 0) {
                         AnimationManager.showChildrenSequentially(tabBar, 100);
                     }
+                    
+                    // 6. 在所有動畫完成後，自動開始 AI 初始化 (延遲1500毫秒)
+                    javafx.animation.PauseTransition pause6 = new javafx.animation.PauseTransition(Duration.millis(1500));
+                    pause6.setOnFinished(aiEvent -> {
+                        startAutoAIInitialization(primaryStage);
+                    });
+                    pause6.play();
                 });
                 pause5.play();
             }
@@ -1103,8 +1112,8 @@ public class compare extends Application implements UIManager.StateChangeListene
                             }
                             
                         } else {
-                            // 如果 Algolia 沒有結果，詢問使用者是否要收集並上傳餐廳資料
-                            showRestaurantNotFoundDialog(trimmedQuery);
+                            // 如果 Algolia 沒有結果，顯示餐廳未找到的整個畫面
+                            showRestaurantNotFoundView(trimmedQuery);
                         }
                     });
                     
@@ -1177,43 +1186,19 @@ public class compare extends Application implements UIManager.StateChangeListene
     }
     
     /**
-     * 顯示餐廳未找到對話框，詢問使用者是否要自動收集
+     * 顯示餐廳未找到的整個畫面視圖
      */
-    private void showRestaurantNotFoundDialog(String query) {
+    private void showRestaurantNotFoundView(String query) {
         Platform.runLater(() -> {
             clearRestaurantDataDisplay("在資料庫中找不到「" + query + "」");
             
-            // 創建對話框
-            javafx.scene.control.Alert alert = new javafx.scene.control.Alert(javafx.scene.control.Alert.AlertType.CONFIRMATION);
-            alert.setTitle("餐廳未找到");
-            alert.setHeaderText("在餐廳資料庫中找不到「" + query + "」");
-            alert.setContentText("是否要自動從 Google Maps 收集此餐廳的資料並加入資料庫？\n\n" +
-                                "收集完成後，餐廳資料將會自動上傳到 Firebase，" +
-                                "之後就可以直接搜尋到了。");
-            
-            // 自定義按鈕
-            javafx.scene.control.ButtonType collectButton = new javafx.scene.control.ButtonType("收集資料");
-            javafx.scene.control.ButtonType openMapButton = new javafx.scene.control.ButtonType("在地圖中開啟");
-            javafx.scene.control.ButtonType cancelButton = new javafx.scene.control.ButtonType("取消", javafx.scene.control.ButtonBar.ButtonData.CANCEL_CLOSE);
-            
-            alert.getButtonTypes().setAll(collectButton, openMapButton, cancelButton);
-            
-            // 設置對話框樣式
-            alert.getDialogPane().setStyle("-fx-background-color: #2C2C2C; -fx-text-fill: white;");
-            
-            // 顯示對話框並處理用戶選擇
-            java.util.Optional<javafx.scene.control.ButtonType> result = alert.showAndWait();
-            
-            if (result.isPresent()) {
-                if (result.get() == collectButton) {
-                    // 用戶選擇收集資料
-                    collectAndUploadRestaurantToFirebase(query);
-                } else if (result.get() == openMapButton) {
-                    // 用戶選擇在地圖中開啟
-                    SearchBar.openMapInBrowser(query);
-                }
-                // 如果是取消，則不做任何事
-            }
+            // 使用 UIManager 的新方法來顯示整個畫面
+            uiManager.showRestaurantNotFoundView(query, 
+                // 收集資料的動作
+                () -> collectAndUploadRestaurantToFirebase(query),
+                // 開啟地圖的動作
+                () -> SearchBar.openMapInBrowser(query)
+            );
         });
     }
     
@@ -1222,81 +1207,40 @@ public class compare extends Application implements UIManager.StateChangeListene
      */
     private void collectAndUploadRestaurantToFirebase(String query) {
         Platform.runLater(() -> {
-            clearRestaurantDataDisplay("正在從 Google Maps 收集「" + query + "」的資料...");
+            uiManager.showDataCollectionProgressView(query);
+            uiManager.updateDataCollectionProgress(0.1, "正在檢查「" + query + "」是否已存在於資料庫中...");
         });
         
         new Thread(() -> {
             try {
-                // 使用 search_res_by_name_upload_firebase.py 腳本
-                String[] command = {
-                    "python", 
-                    "data-collector/search_res_by_name_upload_firebase.py", 
-                    query
-                };
+                // 直接從 Google Maps 搜尋，如果餐廳已存在會得到 409 錯誤
                 
-                ProcessBuilder pb = new ProcessBuilder(command);
-                pb.directory(new File("."));
-                pb.redirectErrorStream(true);
-                
+                // 餐廳不存在於 Algolia，從 Google Maps 搜尋
                 Platform.runLater(() -> {
-                    clearRestaurantDataDisplay("正在收集並上傳「" + query + "」到 Firebase...");
+                    uiManager.updateDataCollectionProgress(0.15, "資料庫中未找到「" + query + "」，正在從 Google Maps 搜尋...");
                 });
                 
-                Process process = pb.start();
+                String foundRestaurantName = checkRestaurantNameFromGoogleMaps(query);
                 
-                // 讀取輸出以獲得進度信息
-                try (java.io.BufferedReader reader = new java.io.BufferedReader(
-                        new java.io.InputStreamReader(process.getInputStream()))) {
-                    String line;
-                    while ((line = reader.readLine()) != null) {
-                        final String outputLine = line;
-                        Platform.runLater(() -> {
-                            System.out.println("Data collection: " + outputLine);
-                        });
-                    }
-                }
-                
-                int exitCode = process.waitFor();
-                
-                if (exitCode == 0) {
+                if (foundRestaurantName != null && !foundRestaurantName.isEmpty()) {
                     Platform.runLater(() -> {
-                        clearRestaurantDataDisplay("「" + query + "」已成功加入資料庫！");
-                        
-                        // 顯示成功對話框
-                        javafx.scene.control.Alert successAlert = new javafx.scene.control.Alert(javafx.scene.control.Alert.AlertType.INFORMATION);
-                        successAlert.setTitle("上傳成功");
-                        successAlert.setHeaderText("餐廳資料已成功加入資料庫");
-                        successAlert.setContentText("「" + query + "」的資料已經成功收集並上傳到 Firebase。\n\n" +
-                                                   "現在您可以重新搜尋這家餐廳了！");
-                        successAlert.getDialogPane().setStyle("-fx-background-color: #2C2C2C; -fx-text-fill: white;");
-                        
-                        successAlert.showAndWait().ifPresent(response -> {
-                            // 自動重新搜尋
-                            handleSearch(query);
-                        });
+                        uiManager.updateDataCollectionProgress(0.2, "在 Google Maps 找到：「" + foundRestaurantName + "」\n\n正在收集餐廳資料...");
                     });
+                    
+                    // 直接收集資料
+                    proceedWithDataCollection(query);
                 } else {
                     Platform.runLater(() -> {
-                        clearRestaurantDataDisplay("收集「" + query + "」的資料時發生錯誤");
+                        clearRestaurantDataDisplay("很抱歉，無法在 Google Maps 中找到「" + query + "」\n\n請檢查餐廳名稱是否正確，\n或嘗試使用更完整的餐廳名稱。");
                         
-                        // 顯示錯誤對話框
-                        javafx.scene.control.Alert errorAlert = new javafx.scene.control.Alert(javafx.scene.control.Alert.AlertType.WARNING);
-                        errorAlert.setTitle("收集失敗");
-                        errorAlert.setHeaderText("無法收集餐廳資料");
-                        errorAlert.setContentText("無法從 Google Maps 找到「" + query + "」的資料，\n" +
-                                                 "請確認餐廳名稱是否正確，或嘗試使用更精確的關鍵字。\n\n" +
-                                                 "您也可以選擇在 Google Maps 中手動搜尋。");
-                        errorAlert.getDialogPane().setStyle("-fx-background-color: #2C2C2C; -fx-text-fill: white;");
+                        // 顯示提示對話框，然後回到主視圖
+                        javafx.scene.control.Alert warningAlert = new javafx.scene.control.Alert(javafx.scene.control.Alert.AlertType.WARNING);
+                        warningAlert.setTitle("找不到餐廳");
+                        warningAlert.setHeaderText("Google Maps 中找不到餐廳");
+                        warningAlert.setContentText("無法在 Google Maps 中找到「" + query + "」。\n\n建議：\n1. 檢查餐廳名稱拼寫\n2. 使用更完整的餐廳名稱\n3. 嘗試包含地區或分店資訊");
                         
-                        // 添加在地圖中開啟的按鈕
-                        javafx.scene.control.ButtonType openMapBtn = new javafx.scene.control.ButtonType("在地圖中開啟");
-                        javafx.scene.control.ButtonType okBtn = new javafx.scene.control.ButtonType("確定", javafx.scene.control.ButtonBar.ButtonData.OK_DONE);
-                        errorAlert.getButtonTypes().setAll(openMapBtn, okBtn);
-                        
-                        errorAlert.showAndWait().ifPresent(response -> {
-                            if (response == openMapBtn) {
-                                SearchBar.openMapInBrowser(query);
-                            }
+                        warningAlert.showAndWait().ifPresent(response -> {
+                            uiManager.showMainView();
                         });
                     });
                 }
@@ -1304,13 +1248,401 @@ public class compare extends Application implements UIManager.StateChangeListene
             } catch (Exception e) {
                 e.printStackTrace();
                 Platform.runLater(() -> {
-                    clearRestaurantDataDisplay("收集資料時發生錯誤：" + e.getMessage());
-                    SearchBar.openMapInBrowser(query);
+                    clearRestaurantDataDisplay("檢查時發生錯誤：" + e.getMessage());
+                    
+                    javafx.scene.control.Alert errorAlert = new javafx.scene.control.Alert(javafx.scene.control.Alert.AlertType.ERROR);
+                    errorAlert.setTitle("系統錯誤");
+                    errorAlert.setHeaderText("檢查餐廳時發生錯誤");
+                    errorAlert.setContentText("發生錯誤：" + e.getMessage());
+                    
+                    errorAlert.showAndWait().ifPresent(response -> {
+                        uiManager.showMainView();
+                    });
                 });
             }
         }).start();
     }
     
+    /**
+     * 從 Google Maps 檢查餐廳名稱（不執行收集）
+     * 會嘗試多種搜尋詞組變化以提高成功率
+     */
+    private String checkRestaurantNameFromGoogleMaps(String query) {
+        // 生成多種搜尋詞組變化
+        String[] searchVariants = generateSearchVariants(query);
+        
+        for (String variant : searchVariants) {
+            try {
+                System.out.println("🔍 嘗試搜尋變體：" + variant);
+                
+                // 使用專用的Python腳本檢查餐廳是否存在
+                String[] command = {
+                    "python", 
+                    "scripts/check_restaurant.py",
+                    variant
+                };
+                
+                ProcessBuilder pb = new ProcessBuilder(command);
+                pb.directory(new File("."));
+                pb.redirectErrorStream(true);
+                
+                Process process = pb.start();
+                
+                try (java.io.BufferedReader reader = new java.io.BufferedReader(
+                        new java.io.InputStreamReader(process.getInputStream()))) {
+                    String line;
+                    while ((line = reader.readLine()) != null) {
+                        if (line.startsWith("FOUND_NAME:")) {
+                            String foundName = line.substring("FOUND_NAME:".length()).trim();
+                            System.out.println("✅ 成功找到餐廳：" + foundName + " (使用搜尋詞：" + variant + ")");
+                            return foundName;
+                        }
+                    }
+                }
+                
+                process.waitFor();
+            } catch (Exception e) {
+                System.err.println("檢查餐廳名稱時發生錯誤（搜尋詞：" + variant + "）：" + e.getMessage());
+            }
+        }
+        
+        System.out.println("❌ 嘗試了所有搜尋變體都未找到餐廳");
+        return null;
+    }
+    
+    /**
+     * 為給定的查詢生成多種搜尋詞組變化，提高搜尋成功率
+     */
+    private String[] generateSearchVariants(String query) {
+        java.util.List<String> variants = new java.util.ArrayList<>();
+        
+        // 1. 原始查詢
+        variants.add(query);
+        
+        // 2. 基於常見分隔符分割
+        String[] words = query.split("[\\s\\-－_&]+");
+        if (words.length > 1) {
+            // 嘗試前1-3個單詞的組合
+            for (int i = 1; i <= Math.min(3, words.length); i++) {
+                StringBuilder sb = new StringBuilder();
+                for (int j = 0; j < i; j++) {
+                    if (j > 0) sb.append(" ");
+                    sb.append(words[j]);
+                }
+                String variant = sb.toString().trim();
+                if (!variant.isEmpty() && variant.length() > 2) {
+                    variants.add(variant);
+                }
+            }
+        }
+        
+        // 3. 針對中文餐廳名稱的智能分割（如果沒有明顯分隔符）
+        if (words.length == 1 && query.length() > 3) {
+            // 嘗試常見的餐廳名稱模式
+            if (query.contains("廣東粥")) {
+                String baseName = query.replace("廣東粥", "").trim();
+                if (!baseName.isEmpty() && baseName.length() >= 2) {
+                    variants.add(baseName);  // 例如：好粥到廣東粥 -> 好粥到
+                }
+            }
+            
+            if (query.contains("冰沙豆花")) {
+                String baseName = query.replace("冰沙豆花", "").trim();
+                if (!baseName.isEmpty() && baseName.length() >= 2) {
+                    variants.add(baseName);  // 例如：好豆味冰沙豆花 -> 好豆味
+                }
+            }
+            
+            // 針對前2-4個字符作為餐廳主名稱的嘗試
+            if (query.length() >= 4) {
+                for (int len = 2; len <= Math.min(4, query.length() - 1); len++) {
+                    String prefix = query.substring(0, len);
+                    if (prefix.length() >= 2) {
+                        variants.add(prefix);
+                    }
+                }
+            }
+        }
+        
+        // 4. 移除分店和地區資訊
+        String withoutBranch = query.replaceAll("[-－].*店.*", "")
+                                   .replaceAll("[-－].*分店.*", "")
+                                   .replaceAll("[-－].*門市.*", "")
+                                   .replaceAll("[-－].*SOGO.*", "")
+                                   .replaceAll("[-－].*新竹.*", "")
+                                   .replaceAll("[-－].*台北.*", "")
+                                   .replaceAll("[-－].*台中.*", "")
+                                   .replaceAll("[-－].*高雄.*", "")
+                                   .replaceAll("\\s*(新竹|台北|台中|高雄|竹北|竹南).*", "")
+                                   .trim();
+        if (!withoutBranch.equals(query) && !withoutBranch.isEmpty() && withoutBranch.length() > 2) {
+            variants.add(withoutBranch);
+        }
+        
+        // 5. 只保留中文和英文主要部分
+        String cleanName = query.replaceAll("[\\s\\-－_()（）\\[\\]]+", " ")
+                               .replaceAll("\\s+", " ")
+                               .trim();
+        if (!cleanName.equals(query) && !cleanName.isEmpty()) {
+            variants.add(cleanName);
+        }
+        
+        // 6. 如果包含英文，嘗試只保留英文部分
+        if (query.matches(".*[a-zA-Z].*")) {
+            String englishOnly = query.replaceAll("[^a-zA-Z\\s&]", " ")
+                                     .replaceAll("\\s+", " ")
+                                     .trim();
+            if (!englishOnly.isEmpty() && englishOnly.length() > 2) {
+                variants.add(englishOnly);
+            }
+        }
+        
+        // 7. 如果包含中文，嘗試只保留中文部分
+        String chineseOnly = query.replaceAll("[a-zA-Z0-9\\s\\-－_()（）\\[\\]&]+", "")
+                                 .trim();
+        if (!chineseOnly.isEmpty() && chineseOnly.length() > 2) {
+            variants.add(chineseOnly);
+        }
+        
+        // 移除重複項目並保持原始順序
+        java.util.LinkedHashSet<String> uniqueVariants = new java.util.LinkedHashSet<>(variants);
+        String[] result = uniqueVariants.toArray(new String[0]);
+        
+        System.out.println("📝 生成的搜尋變體：" + java.util.Arrays.toString(result));
+        return result;
+    }
+    
+    /**
+     * 計算兩個字串的相似度
+     */
+    private double calculateNameSimilarity(String str1, String str2) {
+        if (str1 == null || str2 == null) return 0.0;
+        if (str1.equals(str2)) return 1.0;
+        
+        // 檢查是否包含關係
+        if (str2.contains(str1) || str1.contains(str2)) {
+            return 0.8; // 如果一個包含另一個，認為相似度較高
+        }
+        
+        // 使用簡單的編輯距離算法
+        int len1 = str1.length();
+        int len2 = str2.length();
+        int[][] dp = new int[len1 + 1][len2 + 1];
+        
+        for (int i = 0; i <= len1; i++) {
+            for (int j = 0; j <= len2; j++) {
+                if (i == 0) {
+                    dp[i][j] = j;
+                } else if (j == 0) {
+                    dp[i][j] = i;
+                } else if (str1.charAt(i - 1) == str2.charAt(j - 1)) {
+                    dp[i][j] = dp[i - 1][j - 1];
+                } else {
+                    dp[i][j] = 1 + Math.min(dp[i - 1][j], Math.min(dp[i][j - 1], dp[i - 1][j - 1]));
+                }
+            }
+        }
+        
+        int maxLen = Math.max(len1, len2);
+        return maxLen == 0 ? 1.0 : 1.0 - (double) dp[len1][len2] / maxLen;
+    }
+    
+    /**
+     * 執行實際的資料收集工作
+     */
+    private void proceedWithDataCollection(String query) {
+        Platform.runLater(() -> {
+            uiManager.showDataCollectionProgressView(query);
+            uiManager.updateDataCollectionProgress(0.2, "正在收集並上傳「" + query + "」到 Firebase...");
+        });
+        
+        try {
+            // 使用 search_res_by_name_upload_firebase.py 腳本
+            String[] command = {
+                "python", 
+                "data-collector/search_res_by_name_upload_firebase.py", 
+                query
+            };
+            
+            ProcessBuilder pb = new ProcessBuilder(command);
+            pb.directory(new File("."));
+            pb.redirectErrorStream(true);
+            
+            Process process = pb.start();
+            
+            // 讀取輸出以獲得進度信息
+            final boolean[] hasConflictError = {false};
+            final String[] lastSuccessName = {null};
+            
+            try (java.io.BufferedReader reader = new java.io.BufferedReader(
+                    new java.io.InputStreamReader(process.getInputStream()))) {
+                
+                // 讀取輸出，因為使用了redirectErrorStream(true)，錯誤也會在標準輸出中
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    final String outputLine = line;
+                    Platform.runLater(() -> {
+                        System.out.println("Data collection output: " + outputLine);
+                        
+                        // 根據輸出內容更新進度條
+                        if (outputLine.contains("正在搜尋餐廳")) {
+                            uiManager.updateDataCollectionProgress(0.3, "🔍 正在搜尋餐廳...");
+                        } else if (outputLine.contains("找到餐廳 ID")) {
+                            uiManager.updateDataCollectionProgress(0.4, "✅ 找到餐廳 ID");
+                        } else if (outputLine.contains("餐廳資訊：")) {
+                            uiManager.updateDataCollectionProgress(0.5, "📍 已獲取餐廳資訊");
+                        } else if (outputLine.contains("正在收集評論資料")) {
+                            uiManager.updateDataCollectionProgress(0.6, "💬 正在收集評論資料...");
+                        } else if (outputLine.contains("正在上傳到 Firestore")) {
+                            uiManager.updateDataCollectionProgress(0.8, "☁️ 正在上傳到 Firestore...");
+                        } else if (outputLine.contains("已成功上傳至 Firestore")) {
+                            uiManager.updateDataCollectionProgress(0.95, "🎉 資料上傳完成！");
+                        }
+                    });
+                    
+                    // 檢查是否有 409 衝突錯誤
+                    if (line.contains("409") && line.contains("Conflict")) {
+                        hasConflictError[0] = true;
+                    }
+                    
+                    // 檢查是否有成功上傳的餐廳名稱
+                    if (line.startsWith("餐廳名稱：")) {
+                        lastSuccessName[0] = line.substring("餐廳名稱：".length()).trim();
+                    }
+                }
+            }
+            
+            // 設定超時時間為60秒
+            boolean finished = process.waitFor(60, java.util.concurrent.TimeUnit.SECONDS);
+            int exitCode;
+            
+            if (!finished) {
+                // 如果超時，強制終止進程
+                process.destroyForcibly();
+                exitCode = -1;
+                System.err.println("Python script timed out after 60 seconds");
+                Platform.runLater(() -> {
+                    uiManager.updateDataCollectionProgress(0.0, "❌ 資料收集超時");
+                    uiManager.showDataCollectionCompleteView(query, false, "資料收集過程超時，請稍後再試。");
+                });
+                return;
+            } else {
+                exitCode = process.exitValue();
+                System.out.println("Python script finished with exit code: " + exitCode);
+            }
+            
+            if (exitCode == 0) {
+                final String finalSuccessName = lastSuccessName[0];
+                Platform.runLater(() -> {
+                    // 更新進度條到100%
+                    uiManager.updateDataCollectionProgress(1.0, "✅ 完成！");
+                    
+                    String successMessage = hasConflictError[0] ? 
+                        String.format("✅ 好消息！「%s」已經在資料庫中了！\n\n🏪 實際餐廳名稱：%s\n\n💡 為什麼剛才搜尋不到？\n• 資料庫同步需要 2-5 分鐘時間\n• 搜尋引擎正在更新索引\n\n🔍 系統將自動重新搜尋：\n• 3秒後自動重新搜尋「%s」\n• 如果還是找不到，請等待2-3分鐘後再試", 
+                                    query, 
+                                    finalSuccessName != null ? finalSuccessName : query,
+                                    finalSuccessName != null ? finalSuccessName : query) :
+                        String.format("🎉 成功！「%s」的資料已經收集完成！\n\n📊 資料已上傳到 Firebase\n🔍 系統將自動重新搜尋這家餐廳！", query);
+                    
+                    // 使用新的完成視圖
+                    uiManager.showDataCollectionCompleteView(
+                        finalSuccessName != null ? finalSuccessName : query, 
+                        true, 
+                        successMessage
+                    );
+                    
+                    // 自動同步到Algolia並延遲足夠時間後重新搜尋
+                    new Thread(() -> {
+                        try {
+                            // 先等待1秒讓Firebase寫入完成
+                            Thread.sleep(1000);
+                            
+                            // 自動同步到Algolia
+                            syncRestaurantToAlgolia(finalSuccessName != null ? finalSuccessName : query);
+                            
+                            // 等待8秒確保Algolia索引更新完成
+                            Thread.sleep(8000);
+                            Platform.runLater(() -> {
+                                uiManager.showMainView();
+                                if (hasConflictError[0] && finalSuccessName != null && !finalSuccessName.equals(query)) {
+                                    handleSearch(finalSuccessName);
+                                } else {
+                                    handleSearch(query);
+                                }
+                            });
+                        } catch (InterruptedException e) {
+                            Thread.currentThread().interrupt();
+                        }
+                    }).start();
+                });
+            } else {
+                Platform.runLater(() -> {
+                    uiManager.updateDataCollectionProgress(0.0, "❌ 上傳失敗");
+                    
+                    String errorMessage = "無法從 Google Maps 找到「" + query + "」的資料，\n請確認餐廳名稱是否正確，或嘗試使用更精確的關鍵字。\n\n您也可以選擇在 Google Maps 中手動搜尋。";
+                    
+                    uiManager.showDataCollectionCompleteView(query, false, errorMessage);
+                });
+            }
+            
+        } catch (Exception e) {
+            e.printStackTrace();
+            Platform.runLater(() -> {
+                clearRestaurantDataDisplay("收集資料時發生錯誤：" + e.getMessage());
+                SearchBar.openMapInBrowser(query);
+            });
+        }
+    }
+    
+    /**
+     * 自動同步餐廳到Algolia搜尋引擎
+     */
+    private void syncRestaurantToAlgolia(String restaurantName) {
+        try {
+            System.out.println("正在同步餐廳到Algolia：" + restaurantName);
+            
+            String[] command = {
+                "python", 
+                "scripts/auto_sync_restaurant.py", 
+                restaurantName
+            };
+            
+            ProcessBuilder pb = new ProcessBuilder(command);
+            pb.directory(new File("."));
+            pb.redirectErrorStream(true);
+            
+            Process process = pb.start();
+            
+            // 讀取輸出
+            try (java.io.BufferedReader reader = new java.io.BufferedReader(
+                    new java.io.InputStreamReader(process.getInputStream()))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    System.out.println("Algolia sync: " + line);
+                }
+            }
+            
+            // 增加超時保護，防止無限等待
+            boolean finished = process.waitFor(30, java.util.concurrent.TimeUnit.SECONDS);
+            
+            if (!finished) {
+                // 如果超時，強制終止進程
+                process.destroyForcibly();
+                System.out.println("⚠️ Algolia同步超時，已強制終止");
+            } else {
+                int exitCode = process.exitValue();
+                if (exitCode == 0) {
+                    System.out.println("✅ 成功同步餐廳到Algolia：" + restaurantName);
+                } else {
+                    System.out.println("⚠️ Algolia同步失敗，退出碼：" + exitCode);
+                }
+            }
+            
+        } catch (Exception e) {
+            System.err.println("Algolia同步發生錯誤：" + e.getMessage());
+        }
+    }
+
     /**
      * 直接從 Google Maps 搜尋並收集餐廳資料
      */
@@ -1526,6 +1858,28 @@ public class compare extends Application implements UIManager.StateChangeListene
         if (isShowing && isSettingsActive[0]) {
             isSettingsActive[0] = false;
             settingsButton.setStyle(normalButtonStyle);
+        }
+    }
+    
+    @Override
+    public void onRestaurantNotFoundStateChanged(boolean isShowing) {
+        // 當餐廳未找到視圖顯示時，確保其他視圖都被關閉
+        if (isShowing) {
+            if (isSuggestionActive[0]) {
+                isSuggestionActive[0] = false;
+                suggestionButton.setStyle(normalButtonStyle);
+            }
+            if (isReportActive[0]) {
+                isReportActive[0] = false;
+                reportButton.setStyle(normalButtonStyle);
+            }
+            if (isSettingsActive[0]) {
+                isSettingsActive[0] = false;
+                settingsButton.setStyle(normalButtonStyle);
+            }
+            if (aiChat.isActive()) {
+                aiChat.hideChatView();
+            }
         }
     }
     
@@ -2370,6 +2724,120 @@ public class compare extends Application implements UIManager.StateChangeListene
         Label label = new Label(message);
         label.setStyle("-fx-text-fill: #E03C31; -fx-font-style: italic; -fx-padding: 5;");
         return label;
+    }
+
+    /**
+     * 顯示 AI 初始化對話框
+     */
+    private void showAIInitializationDialog(Stage primaryStage) {
+        // 檢查是否已經有對話框在顯示
+        AIProgressDialog dialog = AIProgressDialog.show(primaryStage, "AI 功能初始化");
+        
+        // 開始 AI 初始化
+        dialog.startAIInitialization(new AIProgressDialog.ProgressCallback() {
+            @Override
+            public void onProgress(double progress, String status, String detail) {
+                // 進度更新會自動在對話框中顯示
+            }
+            
+            @Override
+            public void onComplete(boolean success) {
+                Platform.runLater(() -> {
+                    if (success) {
+                        // 顯示成功訊息
+                        Alert alert = new Alert(Alert.AlertType.INFORMATION);
+                        alert.setTitle("AI 初始化完成");
+                        alert.setHeaderText("AI 功能已準備就緒！");
+                        alert.setContentText("現在您可以使用所有 AI 功能，包括餐廳評論分析和智能建議。");
+                        alert.showAndWait();
+                    } else {
+                        // 顯示失敗訊息
+                        Alert alert = new Alert(Alert.AlertType.WARNING);
+                        alert.setTitle("AI 初始化失敗");
+                        alert.setHeaderText("AI 功能初始化未完成");
+                        alert.setContentText("部分 AI 功能可能無法使用。您可以稍後再次嘗試初始化。");
+                        alert.showAndWait();
+                    }
+                    dialog.close();
+                });
+            }
+            
+            @Override
+            public void onError(String error) {
+                Platform.runLater(() -> {
+                    Alert alert = new Alert(Alert.AlertType.ERROR);
+                    alert.setTitle("AI 初始化錯誤");
+                    alert.setHeaderText("初始化過程中發生錯誤");
+                    alert.setContentText("錯誤詳情：" + error);
+                    alert.showAndWait();
+                    dialog.close();
+                });
+            }
+        });
+    }
+
+    /**
+     * 自動開始 AI 初始化
+     */
+    private void startAutoAIInitialization(Stage primaryStage) {
+        // 在背景檢查 AI 是否需要初始化
+        new Thread(() -> {
+            try {
+                bigproject.ai.OllamaManager manager = new bigproject.ai.OllamaManager();
+                
+                // 快速檢查是否需要初始化
+                boolean needsInitialization = !manager.isOllamaInstalled() || 
+                                            !manager.isModelDownloaded("gemma3:4b");
+                
+                if (needsInitialization) {
+                    // 需要初始化，顯示進度對話框
+                    Platform.runLater(() -> {
+                        AIProgressDialog dialog = AIProgressDialog.show(primaryStage, "AI 功能初始化");
+                        
+                        // 開始 AI 初始化
+                        dialog.startAIInitialization(new AIProgressDialog.ProgressCallback() {
+                            @Override
+                            public void onProgress(double progress, String status, String detail) {
+                                // 進度更新會自動在對話框中顯示
+                            }
+                            
+                            @Override
+                            public void onComplete(boolean success) {
+                                Platform.runLater(() -> {
+                                    dialog.close();
+                                    if (success) {
+                                        // 靜默完成，不顯示成功訊息
+                                        System.out.println("AI 功能初始化完成");
+                                    } else {
+                                        // 只在失敗時顯示訊息
+                                        Alert alert = new Alert(Alert.AlertType.WARNING);
+                                        alert.setTitle("AI 初始化失敗");
+                                        alert.setHeaderText("AI 功能初始化未完成");
+                                        alert.setContentText("部分 AI 功能可能無法使用。您可以稍後在設定中重新初始化。");
+                                        alert.show(); // 使用 show() 而不是 showAndWait()，不阻塞使用者
+                                    }
+                                });
+                            }
+                            
+                            @Override
+                            public void onError(String error) {
+                                Platform.runLater(() -> {
+                                    dialog.close();
+                                    // 錯誤時也不強制顯示對話框，只在控制台記錄
+                                    System.err.println("AI 初始化錯誤: " + error);
+                                });
+                            }
+                        });
+                    });
+                } else {
+                    // 不需要初始化，靜默完成
+                    System.out.println("AI 功能已就緒");
+                }
+                
+            } catch (Exception e) {
+                System.err.println("檢查 AI 初始化狀態時發生錯誤: " + e.getMessage());
+            }
+        }).start();
     }
 }
 

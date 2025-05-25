@@ -236,19 +236,30 @@ def get_restaurant_id_by_name(restaurant_name):
             例如：隱家拉麵 士林店
     
     Returns:
-        str: 餐廳的唯一識別碼
+        str: 餐廳的唯一識別碼，如果找不到則返回 None
     
     注意：餐廳名稱必須完全匹配Google地圖上的名稱
     '''
-    store_id_url = "https://www.google.com.tw/maps/search/{restaurant_name}"
-    url = store_id_url.format(restaurant_name=restaurant_name)
-    response = requests.get(url, headers=headers1)
-    soup = bs(response.text, "html.parser")
-    pattern = r'0x.{16}:0x.{16}'
-    match = re.search(pattern, str(soup)) 
-    store_id = match.group()
-    
-    return store_id
+    try:
+        store_id_url = "https://www.google.com.tw/maps/search/{restaurant_name}"
+        url = store_id_url.format(restaurant_name=restaurant_name)
+        response = requests.get(url, headers=headers1, timeout=10)
+        response.raise_for_status()
+        soup = bs(response.text, "html.parser")
+        pattern = r'0x.{16}:0x.{16}'
+        match = re.search(pattern, str(soup))
+        
+        if match:
+            store_id = match.group()
+            # 清理 ID，移除可能的多餘字符
+            store_id = store_id.replace('\\', '').replace('"', '').strip()
+            return store_id
+        else:
+            print(f"找不到餐廳 ID，搜尋關鍵字：{restaurant_name}")
+            return None
+    except Exception as e:
+        print(f"搜尋餐廳 ID 時發生錯誤：{e}")
+        return None
 
 def get_restaurants_in_area(center_lat, center_lon, search_radius):
     '''

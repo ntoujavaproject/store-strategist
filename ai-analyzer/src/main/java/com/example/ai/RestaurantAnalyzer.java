@@ -21,7 +21,7 @@ public class RestaurantAnalyzer {
     private static final String OLLAMA_URL    = System.getenv().getOrDefault(
             "OLLAMA_URL", "http://localhost:11434/api/generate");
     private static final String DEFAULT_MODEL = System.getenv().getOrDefault(
-            "OLLAMA_MODEL", "gemma:1b");
+            "OLLAMA_MODEL", "gemma3:4b");
 
     private static final ObjectMapper mapper = new ObjectMapper()
             .enable(SerializationFeature.INDENT_OUTPUT);

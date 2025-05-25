@@ -17,9 +17,9 @@ import java.util.concurrent.Executors;
  * Ollama管理類，負責下載、安裝和管理Ollama
  */
 public class OllamaManager {
-    // Ollama官方下載URL
-    private static final String OLLAMA_MAC_URL = "https://github.com/ollama/ollama/releases/latest/download/ollama-darwin";
-    private static final String OLLAMA_WINDOWS_URL = "https://github.com/ollama/ollama/releases/latest/download/ollama-windows.zip";
+    // Ollama官方下載URL - 更新為最新版本
+    private static final String OLLAMA_MAC_URL = "https://github.com/ollama/ollama/releases/latest/download/ollama-darwin.tgz";
+    private static final String OLLAMA_WINDOWS_URL = "https://github.com/ollama/ollama/releases/latest/download/ollama-windows-amd64.zip";
     
     // 用於執行Ollama命令的線程池
     private static final ExecutorService executor = Executors.newSingleThreadExecutor();
@@ -94,15 +94,24 @@ public class OllamaManager {
             // 創建臨時目錄來存放下載的文件
             Path tempDir = Files.createTempDirectory("ollama_installer");
             
-            // 根據操作系統選擇下載URL
-            String downloadUrl = isWindows() ? OLLAMA_WINDOWS_URL : OLLAMA_MAC_URL;
-            Path downloadPath = tempDir.resolve(isWindows() ? "ollama.zip" : "ollama");
+            // 根據操作系統選擇下載URL和檔案名
+            String downloadUrl;
+            String fileName;
+            if (isWindows()) {
+                downloadUrl = OLLAMA_WINDOWS_URL;
+                fileName = "ollama.zip";
+            } else {
+                downloadUrl = OLLAMA_MAC_URL;
+                fileName = "ollama.tgz";
+            }
+            
+            Path downloadPath = tempDir.resolve(fileName);
             
             // 下載Ollama
             System.out.println("從 " + downloadUrl + " 下載Ollama...");
             downloadFile(new URL(downloadUrl), downloadPath);
             
-            // 在Windows上解壓文件，在Mac上設置執行權限
+            // 解壓並安裝
             if (isWindows()) {
                 System.out.println("解壓Ollama...");
                 unzipFile(downloadPath, tempDir);
@@ -110,11 +119,22 @@ public class OllamaManager {
                 Files.createDirectories(ollamaPath.getParent());
                 Files.copy(tempDir.resolve("ollama.exe"), ollamaPath, StandardCopyOption.REPLACE_EXISTING);
             } else {
-                // 在Mac上設置執行權限
-                System.out.println("設置Ollama執行權限...");
+                // Mac: 解壓 .tgz 檔案
+                System.out.println("解壓Ollama...");
+                untarGzFile(downloadPath, tempDir);
+                // 複製可執行文件到安裝目錄
                 Files.createDirectories(ollamaPath.getParent());
-                Files.copy(downloadPath, ollamaPath, StandardCopyOption.REPLACE_EXISTING);
-                setExecutablePermission(ollamaPath);
+                Path extractedOllama = tempDir.resolve("ollama");
+                if (!Files.exists(extractedOllama)) {
+                    // 可能在子目錄中
+                    extractedOllama = findOllamaExecutable(tempDir);
+                }
+                if (extractedOllama != null && Files.exists(extractedOllama)) {
+                    Files.copy(extractedOllama, ollamaPath, StandardCopyOption.REPLACE_EXISTING);
+                    setExecutablePermission(ollamaPath);
+                } else {
+                    throw new IOException("找不到 Ollama 可執行檔案");
+                }
             }
             
             // 安裝完成後清理臨時文件
@@ -135,6 +155,30 @@ public class OllamaManager {
             e.printStackTrace();
             return false;
         }
+    }
+    
+    /**
+     * 解壓 .tar.gz 檔案 (Mac)
+     */
+    private void untarGzFile(Path tarGzFile, Path destDir) throws IOException, InterruptedException {
+        // 使用系統的 tar 命令解壓
+        ProcessBuilder pb = new ProcessBuilder("tar", "-xzf", tarGzFile.toString(), "-C", destDir.toString());
+        Process process = pb.start();
+        int exitCode = process.waitFor();
+        if (exitCode != 0) {
+            throw new IOException("解壓失敗，退出碼: " + exitCode);
+        }
+    }
+    
+    /**
+     * 在目錄中尋找 Ollama 可執行檔案
+     */
+    private Path findOllamaExecutable(Path dir) throws IOException {
+        return Files.walk(dir)
+                .filter(path -> path.getFileName().toString().equals("ollama"))
+                .filter(Files::isExecutable)
+                .findFirst()
+                .orElse(null);
     }
     
     /**
@@ -204,7 +248,7 @@ public class OllamaManager {
     /**
      * 檢查Ollama是否已安裝
      */
-    private boolean isOllamaInstalled() {
+    public boolean isOllamaInstalled() {
         return Files.exists(ollamaPath) && Files.isExecutable(ollamaPath);
     }
     
@@ -340,7 +384,7 @@ public class OllamaManager {
     /**
      * 檢查模型是否已下載
      */
-    private boolean isModelDownloaded(String modelName) {
+    public boolean isModelDownloaded(String modelName) {
         try {
             // 運行命令檢查模型列表
             ProcessBuilder processBuilder = new ProcessBuilder();

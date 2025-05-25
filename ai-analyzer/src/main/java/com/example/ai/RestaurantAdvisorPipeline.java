@@ -21,7 +21,7 @@ public class RestaurantAdvisorPipeline {
     private static final String OLLAMA_URL =
         System.getenv().getOrDefault("OLLAMA_URL", "http://localhost:11434/api/generate");
     private static final String MODEL =
-        System.getenv().getOrDefault("OLLAMA_MODEL", "gemma3:1b");
+        System.getenv().getOrDefault("OLLAMA_MODEL", "gemma3:4b");
 
     private static final ObjectMapper M = new ObjectMapper()
         .enable(SerializationFeature.INDENT_OUTPUT);

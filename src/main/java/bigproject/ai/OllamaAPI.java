@@ -20,7 +20,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
  */
 public class OllamaAPI {
     private static final String OLLAMA_API_URL = "http://localhost:11434/api/generate";
-    private static final String DEFAULT_MODEL = "gemma3:1b";
+    private static final String DEFAULT_MODEL = "gemma3:4b";
     private static final ObjectMapper mapper = new ObjectMapper();
     private static final HttpClient client = HttpClient.newHttpClient();
     private static final ExecutorService executor = Executors.newFixedThreadPool(2);
