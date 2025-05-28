@@ -662,10 +662,27 @@ public class LatestReviewsManager {
             timeDescription = "未知時間";
         }
         
-        // 創建並添加評論卡片
-        container.getChildren().add(
-            parentComponent.createReviewCard(timeDescription, reviewer, rating, commentText)
-        );
+        // 🔧 添加debug日誌
+        System.out.println("📝 正在創建評論卡片: " + reviewer + " - " + timeDescription + " - 評分: " + rating);
+        
+        // 🔧 確保在JavaFX主線程中創建和添加評論卡片
+        Platform.runLater(() -> {
+            try {
+                VBox reviewCard = parentComponent.createReviewCard(timeDescription, reviewer, rating, commentText);
+                container.getChildren().add(reviewCard);
+                System.out.println("✅ 評論卡片已添加到容器: " + reviewer);
+            } catch (Exception e) {
+                System.err.println("❌ 創建評論卡片時出錯: " + e.getMessage());
+                e.printStackTrace();
+                
+                // 如果創建評論卡片失敗，添加簡單的文本標籤
+                Label fallbackLabel = new Label(timeDescription + " - " + reviewer + " (" + rating + "★)\n" + commentText);
+                fallbackLabel.setStyle("-fx-text-fill: white; -fx-wrap-text: true; -fx-padding: 10; -fx-background-color: rgba(255,255,255,0.1); -fx-background-radius: 8;");
+                fallbackLabel.setWrapText(true);
+                container.getChildren().add(fallbackLabel);
+                System.out.println("⚠️ 使用備用標籤顯示評論: " + reviewer);
+            }
+        });
     }
     
     /**
@@ -770,5 +787,153 @@ public class LatestReviewsManager {
         }
         
         return null;
+    }
+
+    /**
+     * 根據餐廳名稱搜尋獲取 place_id
+     * @param restaurantName 餐廳名稱
+     * @return place_id 或 null（如果找不到）
+     */
+    private CompletableFuture<String> searchPlaceIdByName(String restaurantName) {
+        if (apiKey == null || apiKey.isEmpty()) {
+            System.err.println("錯誤: API 金鑰為空，無法搜尋餐廳");
+            return CompletableFuture.completedFuture(null);
+        }
+        
+        if (restaurantName == null || restaurantName.trim().isEmpty()) {
+            System.err.println("錯誤: 餐廳名稱為空，無法搜尋");
+            return CompletableFuture.completedFuture(null);
+        }
+        
+        try {
+            String encodedName = URLEncoder.encode(restaurantName.trim(), StandardCharsets.UTF_8.toString());
+            String url = String.format(
+                "https://maps.googleapis.com/maps/api/place/findplacefromtext/json?input=%s&inputtype=textquery&fields=place_id,name&language=zh-TW&key=%s",
+                encodedName,
+                apiKey
+            );
+            
+            HttpRequest request = HttpRequest.newBuilder()
+                .GET()
+                .uri(URI.create(url))
+                .build();
+            
+            System.out.println("🔍 正在搜尋餐廳: " + restaurantName);
+            
+            return httpClient.sendAsync(request, HttpResponse.BodyHandlers.ofString())
+                .thenApply(response -> {
+                    if (response.statusCode() == 200) {
+                        try {
+                            JSONObject jsonResponse = new JSONObject(response.body());
+                            System.out.println("📍 搜尋 API 回應: " + jsonResponse.toString());
+                            
+                            if ("OK".equals(jsonResponse.optString("status")) && jsonResponse.has("candidates")) {
+                                JSONArray candidates = jsonResponse.getJSONArray("candidates");
+                                if (candidates.length() > 0) {
+                                    JSONObject firstCandidate = candidates.getJSONObject(0);
+                                    String placeId = firstCandidate.optString("place_id");
+                                    String foundName = firstCandidate.optString("name");
+                                    
+                                    System.out.println("✅ 找到餐廳: " + foundName + " (place_id: " + placeId + ")");
+                                    return placeId;
+                                } else {
+                                    System.out.println("❌ 搜尋結果中沒有找到任何餐廳");
+                                }
+                            } else {
+                                System.out.println("❌ 搜尋 API 狀態不是 OK: " + jsonResponse.optString("status"));
+                            }
+                        } catch (Exception e) {
+                            System.err.println("解析搜尋 API 回應時出錯: " + e.getMessage());
+                        }
+                    } else {
+                        System.out.println("❌ 搜尋 API 回應狀態碼: " + response.statusCode());
+                        System.out.println("回應內容: " + response.body());
+                    }
+                    return null;
+                })
+                .exceptionally(e -> {
+                    System.err.println("搜尋餐廳時發生錯誤: " + e.getMessage());
+                    return null;
+                });
+        } catch (Exception e) {
+            System.err.println("搜尋餐廳時發生錯誤: " + e.getMessage());
+            return CompletableFuture.completedFuture(null);
+        }
+    }
+
+    /**
+     * 直接從 Google Maps API 獲取最新評論並顯示
+     * 如果沒有 place_id，會先嘗試用餐廳名稱搜尋
+     * @param placeId 地點ID（可以為空）
+     * @param restaurantName 餐廳名稱（當 placeId 為空時使用）
+     * @param days 天數範圍
+     * @param container 評論容器
+     * @param parentComponent 父元件
+     */
+    public void fetchAndDisplayReviewsWithFallback(String placeId, String restaurantName, int days, VBox container, compare parentComponent) {
+        // 清空容器
+        Platform.runLater(() -> {
+            container.getChildren().clear();
+            container.getChildren().add(parentComponent.createLoadingLabel("正在準備載入近 " + days + " 天的評論..."));
+        });
+        
+        // 確保 API 金鑰有效
+        if (apiKey == null || apiKey.isEmpty()) {
+            Platform.runLater(() -> {
+                container.getChildren().clear();
+                container.getChildren().add(parentComponent.createErrorLabel("API 金鑰未設置"));
+            });
+            System.err.println("錯誤: API 金鑰為空");
+            return;
+        }
+        
+        // 如果有 place_id，直接使用
+        if (placeId != null && !placeId.trim().isEmpty()) {
+            System.out.println("🚀 使用提供的 place_id 獲取評論: " + placeId);
+            fetchAndDisplayReviews(placeId, days, container, parentComponent);
+            return;
+        }
+        
+        // 如果沒有 place_id，嘗試用餐廳名稱搜尋
+        if (restaurantName != null && !restaurantName.trim().isEmpty()) {
+            Platform.runLater(() -> {
+                container.getChildren().clear();
+                container.getChildren().add(parentComponent.createLoadingLabel("正在搜尋餐廳: " + restaurantName + "..."));
+            });
+            
+            searchPlaceIdByName(restaurantName)
+                .thenAccept(foundPlaceId -> {
+                    if (foundPlaceId != null && !foundPlaceId.trim().isEmpty()) {
+                        // 找到 place_id，獲取評論
+                        System.out.println("🎉 搜尋到 place_id，開始獲取評論");
+                        fetchAndDisplayReviews(foundPlaceId, days, container, parentComponent);
+                    } else {
+                        // 沒有找到，顯示錯誤
+                        Platform.runLater(() -> {
+                            container.getChildren().clear();
+                            container.getChildren().add(parentComponent.createErrorLabel("找不到餐廳: " + restaurantName));
+                            container.getChildren().add(parentComponent.createInfoLabel("請檢查餐廳名稱是否正確"));
+                        });
+                        System.err.println("❌ 無法找到餐廳: " + restaurantName);
+                    }
+                })
+                .exceptionally(e -> {
+                    Platform.runLater(() -> {
+                        container.getChildren().clear();
+                        container.getChildren().add(parentComponent.createErrorLabel("搜尋餐廳時發生錯誤"));
+                        container.getChildren().add(parentComponent.createInfoLabel("錯誤: " + e.getMessage()));
+                    });
+                    System.err.println("搜尋餐廳時發生錯誤: " + e.getMessage());
+                    return null;
+                });
+        } else {
+            // 既沒有 place_id 也沒有餐廳名稱
+            Platform.runLater(() -> {
+                container.getChildren().clear();
+                container.getChildren().add(parentComponent.createErrorLabel("無法獲取評論"));
+                container.getChildren().add(parentComponent.createInfoLabel("缺少地點 ID 和餐廳名稱"));
+            });
+            System.err.println("錯誤: 既沒有 place_id 也沒有餐廳名稱");
+        }
     }
 } 

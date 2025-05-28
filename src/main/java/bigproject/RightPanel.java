@@ -11,6 +11,8 @@ import javafx.scene.control.ScrollPane;
 import javafx.scene.control.ScrollPane.ScrollBarPolicy;
 import javafx.scene.control.Separator;
 import javafx.scene.control.TextArea;
+import javafx.scene.control.TextField;
+import javafx.scene.control.Slider;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
@@ -38,13 +40,14 @@ public class RightPanel extends VBox {
     private Label ratingsHeader;
     private VBox ratingsBox;
     private Map<String, ProgressBar> ratingBars;
-    private VBox competitorListVBox;
-    private VBox recentReviewsBox;
+
+
     
     // 分析區塊的 TextArea
     private TextArea featuresArea;
-    private TextArea prosArea;
-    private TextArea consArea;
+    
+    // 🤖 AI 對話相關元件（添加在特色區域下方）
+    private bigproject.ai.ChatRestaurantAdvisor chatAdvisor;
     
     // 父視窗參考
     private compare parentComponent;
@@ -54,6 +57,17 @@ public class RightPanel extends VBox {
     
     // 當前顯示的餐廳JSON檔案
     private String currentJsonFilePath;
+    
+    // 當前搜尋到的餐廳資訊
+    private String currentRestaurantName;
+    private String currentRestaurantId;  
+    private String currentPlaceId;
+    
+    // 近期評論詳細視圖相關
+    private boolean isReviewDetailMode = false;
+    private String originalFeaturesContent = "";
+    private Button monthButton, weekButton, dayButton;
+    private int currentSelectedDays = 30; // 預設為近一個月
     
     /**
      * 建構函數
@@ -66,12 +80,13 @@ public class RightPanel extends VBox {
         // 初始化最新評論管理器，使用 API Key
         this.reviewsManager = new LatestReviewsManager("AIzaSyAfssp2jChrVBpRPFuAhBE6f6kXYDQaV0I");
         
-        // 設置面板樣式
-        setStyle("-fx-background-color: " + RICH_LIGHT_GREEN + "; -fx-background-radius: 0;");
-        setPadding(new Insets(15, 0, 300, 15));  // 右側邊距為0，確保貼緊
-        setPrefWidth(450);  // 固定寬度 450
-        setMinWidth(450);   // 固定最小寬度
-        setMaxWidth(450);   // 固定最大寬度
+        // 🎯 設置深色主題面板樣式
+        setStyle("-fx-background-color: linear-gradient(to bottom, #1A1A1A 0%, #2C2C2C 100%); -fx-background-radius: 0;");
+        setPadding(new Insets(15, 0, 0, 15));  // 🎯 上15px、右0px、底0px、左15px
+        // 🎯 移除固定寬度設置，改為響應式寬度（將由父容器控制）
+        // setPrefWidth(450);  // 移除固定寬度
+        // setMinWidth(450);   // 移除固定最小寬度  
+        // setMaxWidth(450);   // 移除固定最大寬度
         setMinHeight(3000); // 確保所有內容可滾動
         setPrefHeight(3500);
         
@@ -86,152 +101,244 @@ public class RightPanel extends VBox {
         // 評分區域
         initializeRatingsSection();
         
-        // 資料來源區域
-        initializeSourcesSection();
-        
-        // 近期評論區域
-        initializeRecentReviewsSection();
-        
         // 餐廳分析區塊
         initializeAnalysisSection();
         
-        // 增加底部空間，確保滾動時可以顯示所有內容
-        Region spacer = new Region();
-        spacer.setMinHeight(200);
-        spacer.setPrefHeight(200);
-        getChildren().add(spacer);
+        // 移除底部空間，讓內容直接貼到底部
+        // Region spacer = new Region();
+        // spacer.setMinHeight(200);
+        // spacer.setPrefHeight(200);
+        // getChildren().add(spacer);
     }
+    
+    // 添加評分數值標籤的映射
+    private Map<String, Label> ratingValueLabels;
+    
+    // 消費中位數相關元件
+    private Label medianExpenseValueLabel;
     
     /**
      * 初始化評分區域
      */
     private void initializeRatingsSection() {
         ratingsHeader = new Label("綜合評分");
-        ratingsHeader.setFont(Font.font("System", FontWeight.BOLD, 16));
-        ratingsHeader.setStyle("-fx-text-fill: " + PALE_DARK_YELLOW + ";");
+        ratingsHeader.setFont(Font.font("System", FontWeight.BOLD, 18));
+        ratingsHeader.setStyle("-fx-text-fill: #FFFFFF; -fx-effect: dropshadow(three-pass-box, rgba(0,0,0,0.8), 4, 0, 0, 2);");
         
-        ratingsBox = new VBox(5);
-        ratingsBox.setPadding(new Insets(5, 0, 15, 0));
-        ratingsBox.setStyle("-fx-background-color: transparent;");
+        // 🎯 深色主題容器
+        ratingsBox = new VBox(12); // 增加間距
+        ratingsBox.setPadding(new Insets(20, 15, 20, 15));
+        ratingsBox.setStyle("-fx-background-color: linear-gradient(to bottom, #1E1E1E 0%, #2A2A2A 100%); " +
+                           "-fx-background-radius: 12; " +
+                           "-fx-border-color: linear-gradient(to right, #FF6B6B, #4ECDC4, #45B7D1, #96CEB4); " +
+                           "-fx-border-width: 3; " +
+                           "-fx-border-radius: 12; " +
+                           "-fx-effect: dropshadow(three-pass-box, rgba(0,0,0,0.6), 10, 0, 0, 3);");
         
-        // 初始化評分條
+        // 初始化評分條和數值標籤
         ratingBars = new HashMap<>();
+        ratingValueLabels = new HashMap<>();
         String[] categories = {"餐點", "服務", "環境", "價格"};
-        for (String category : categories) {
-            HBox barBox = new HBox(10);
-            barBox.setAlignment(Pos.CENTER_LEFT);
+        String[] icons = {"🍽️", "👥", "🏪", "💰"}; 
+        // 🎨 繽紛的漸層顏色
+        String[] barColors = {
+            "linear-gradient(to right, #FF6B6B 0%, #FF8E8E 100%)", // 紅色漸層
+            "linear-gradient(to right, #4ECDC4 0%, #7FDBDA 100%)", // 青綠色漸層
+            "linear-gradient(to right, #45B7D1 0%, #74C0FC 100%)", // 藍色漸層
+            "linear-gradient(to right, #96CEB4 0%, #B8E6C1 100%)"  // 綠色漸層
+        };
+        String[] shadowColors = {"rgba(255, 107, 107, 0.5)", "rgba(78, 205, 196, 0.5)", "rgba(69, 183, 209, 0.5)", "rgba(150, 206, 180, 0.5)"};
+        
+        for (int i = 0; i < categories.length; i++) {
+            String category = categories[i];
+            String icon = icons[i];
+            String barColor = barColors[i];
+            String shadowColor = shadowColors[i];
             
-            Label catLabel = new Label(category + ":");
-            catLabel.setMinWidth(40);
-            catLabel.setStyle("-fx-text-fill: " + PALE_DARK_YELLOW + ";");
+            // 🎯 創建每個評分項目的容器 - 深色主題
+            VBox ratingItemBox = new VBox(8);
+            ratingItemBox.setPadding(new Insets(15, 20, 15, 20));
+            ratingItemBox.setStyle("-fx-background-color: linear-gradient(to bottom, #2D2D2D 0%, #3A3A3A 100%); " +
+                                  "-fx-background-radius: 8; " +
+                                  "-fx-border-color: rgba(255,255,255,0.1); " +
+                                  "-fx-border-width: 1; " +
+                                  "-fx-border-radius: 8;");
             
-            ProgressBar progressBar = new ProgressBar(0.0);
-            progressBar.setMaxWidth(Double.MAX_VALUE);
-            HBox.setHgrow(progressBar, Priority.ALWAYS);
-            progressBar.setStyle("-fx-accent: " + RICH_MIDTONE_RED + ";");
+            // 頂部：類別名稱和評分數值
+            HBox topRow = new HBox();
+            topRow.setAlignment(Pos.CENTER_LEFT);
             
-            ratingBars.put(category, progressBar);
-            barBox.getChildren().addAll(catLabel, progressBar);
-            ratingsBox.getChildren().add(barBox);
+            // 類別標籤（包含圖標）- 深色主題
+            Label catLabel = new Label(icon + " " + category);
+            catLabel.setMinWidth(80);
+            catLabel.setFont(Font.font("System", FontWeight.BOLD, 14));
+            catLabel.setStyle("-fx-text-fill: #FFFFFF; -fx-effect: dropshadow(three-pass-box, rgba(0,0,0,0.5), 2, 0, 0, 1);");
+            
+            // 佔位空間
+            Region spacer = new Region();
+            HBox.setHgrow(spacer, Priority.ALWAYS);
+            
+            // 🎯 評分數值標籤 - 深色主題繽紛設計
+            Label valueLabel = new Label("0.0");
+            valueLabel.setFont(Font.font("System", FontWeight.BOLD, 16));
+            valueLabel.setStyle("-fx-text-fill: #FFFFFF; " +
+                              "-fx-background-color: " + barColor + "; " +
+                              "-fx-background-radius: 18; " +
+                              "-fx-padding: 6 15 6 15; " +
+                              "-fx-border-color: rgba(255,255,255,0.3); " +
+                              "-fx-border-width: 1.5; " +
+                              "-fx-border-radius: 18; " +
+                              "-fx-effect: dropshadow(three-pass-box, " + shadowColor + ", 5, 0, 0, 2);");
+            ratingValueLabels.put(category, valueLabel);
+            
+            topRow.getChildren().addAll(catLabel, spacer, valueLabel);
+            
+            // 🎯 底部：柱狀圖替代進度條
+            VBox barContainer = new VBox();
+            barContainer.setAlignment(Pos.BOTTOM_LEFT);
+            barContainer.setMinHeight(40);
+            barContainer.setMaxHeight(40);
+            barContainer.setStyle("-fx-background-color: rgba(0,0,0,0.3); " +
+                                 "-fx-background-radius: 6; " +
+                                 "-fx-border-color: rgba(255,255,255,0.1); " +
+                                 "-fx-border-width: 1; " +
+                                 "-fx-border-radius: 6;");
+            
+            // 創建一個柱狀區域
+            Region barFill = new Region();
+            barFill.setMinHeight(0); // 初始高度為0
+            barFill.setMaxWidth(Double.MAX_VALUE);
+            barFill.setStyle("-fx-background-color: " + barColor + "; " +
+                           "-fx-background-radius: 5; " +
+                           "-fx-effect: dropshadow(three-pass-box, " + shadowColor + ", 4, 0, 0, 1);");
+            
+            // 將柱狀條放在容器底部
+            VBox.setVgrow(barFill, Priority.NEVER);
+            barContainer.getChildren().add(barFill);
+            
+            // 儲存進度條參考（這裡用 Region 模擬）
+            ProgressBar fakeProgressBar = new ProgressBar(0.0);
+            fakeProgressBar.setVisible(false); // 隱藏原始進度條
+            ratingBars.put(category, fakeProgressBar);
+            
+            // 🎯 添加豪華的 hover 效果 - 深色主題
+            ratingItemBox.setOnMouseEntered(e -> {
+                ratingItemBox.setStyle("-fx-background-color: linear-gradient(to bottom, #3A3A3A 0%, #4A4A4A 100%); " +
+                                     "-fx-background-radius: 8; " +
+                                     "-fx-border-color: rgba(255,255,255,0.3); " +
+                                     "-fx-border-width: 2; " +
+                                     "-fx-border-radius: 8; " +
+                                     "-fx-effect: dropshadow(three-pass-box, " + shadowColor + ", 12, 0, 0, 3);");
+                // 柱狀圖容器也要有 hover 效果
+                barContainer.setStyle("-fx-background-color: rgba(0,0,0,0.5); " +
+                                    "-fx-background-radius: 6; " +
+                                    "-fx-border-color: rgba(255,255,255,0.2); " +
+                                    "-fx-border-width: 1; " +
+                                    "-fx-border-radius: 6;");
+            });
+            
+            ratingItemBox.setOnMouseExited(e -> {
+                ratingItemBox.setStyle("-fx-background-color: linear-gradient(to bottom, #2D2D2D 0%, #3A3A3A 100%); " +
+                                     "-fx-background-radius: 8; " +
+                                     "-fx-border-color: rgba(255,255,255,0.1); " +
+                                     "-fx-border-width: 1; " +
+                                     "-fx-border-radius: 8;");
+                // 恢復原始的柱狀圖容器樣式
+                barContainer.setStyle("-fx-background-color: rgba(0,0,0,0.3); " +
+                                    "-fx-background-radius: 6; " +
+                                    "-fx-border-color: rgba(255,255,255,0.1); " +
+                                    "-fx-border-width: 1; " +
+                                    "-fx-border-radius: 6;");
+            });
+            
+            ratingItemBox.getChildren().addAll(topRow, barContainer);
+            ratingsBox.getChildren().add(ratingItemBox);
+            
+            // 🎯 在項目之間添加繽紛分隔線（除了最後一個）
+            if (i < categories.length - 1) {
+                Separator separator = new Separator();
+                separator.setStyle("-fx-background-color: linear-gradient(to right, " + 
+                                 "#FF6B6B 0%, #4ECDC4 25%, #45B7D1 50%, #96CEB4 75%, #FF6B6B 100%); " +
+                                 "-fx-opacity: 0.6; " +
+                                 "-fx-padding: 2 0 2 0;");
+                ratingsBox.getChildren().add(separator);
+            }
+            
+            // 🎯 儲存柱狀條參考以便後續更新
+            barFill.setUserData(category + "_bar");
         }
         
-        getChildren().addAll(ratingsHeader, ratingsBox);
+        // 💰 在評分區域前添加消費中位數區域
+        VBox medianExpenseSection = createMedianExpenseSection();
+        
+        getChildren().addAll(ratingsHeader, medianExpenseSection, ratingsBox);
     }
     
     /**
-     * 初始化競爭對手區域
+     * 創建消費中位數區域
      */
-    private void initializeSourcesSection() {
-        Label sourcesLabel = new Label("競爭對手");
-        sourcesLabel.setFont(Font.font("System", FontWeight.BOLD, 16));
-        sourcesLabel.setStyle("-fx-text-fill: " + PALE_DARK_YELLOW + ";");
+    private VBox createMedianExpenseSection() {
+        VBox medianExpenseBox = new VBox(8);
+        medianExpenseBox.setPadding(new Insets(15, 15, 15, 15));
+        medianExpenseBox.setStyle("-fx-background-color: linear-gradient(to bottom, #2A2A2A 0%, #3A3A3A 100%); " +
+                                 "-fx-background-radius: 10; " +
+                                 "-fx-border-color: linear-gradient(to right, #FFD700, #FFA500); " +
+                                 "-fx-border-width: 2; " +
+                                 "-fx-border-radius: 10; " +
+                                 "-fx-effect: dropshadow(three-pass-box, rgba(255,215,0,0.3), 8, 0, 0, 2);");
         
-        competitorListVBox = new VBox(5);
-        competitorListVBox.setPadding(new Insets(5, 0, 0, 0));
-        competitorListVBox.getChildren().add(createCompetitorEntry("海大燒臘", "reviews_data/海大燒臘_reviews.json"));
-        competitorListVBox.getChildren().add(createCompetitorEntry("海那邊小食堂", "reviews_data/海那邊小食堂_reviews.json"));
+        // 消費中位數標題
+        Label titleLabel = new Label("💰 平均消費中位數");
+        titleLabel.setFont(Font.font("System", FontWeight.BOLD, 14));
+        titleLabel.setStyle("-fx-text-fill: #FFD700; " +
+                           "-fx-effect: dropshadow(three-pass-box, rgba(0,0,0,0.6), 3, 0, 0, 1);");
         
-        getChildren().addAll(sourcesLabel, competitorListVBox);
-    }
-    
-    /**
-     * 初始化近期評論區域
-     */
-    private void initializeRecentReviewsSection() {
-        Label recentReviewsLabel = new Label("近期評論");
-        recentReviewsLabel.setFont(Font.font("System", FontWeight.BOLD, 16));
-        recentReviewsLabel.setStyle("-fx-text-fill: " + PALE_DARK_YELLOW + ";");
-
-        // 創建時間範圍選擇按鈕
-        HBox timeRangeButtonsBox = new HBox(5);
-        timeRangeButtonsBox.setAlignment(Pos.CENTER_LEFT);
+        // 消費數值容器
+        HBox valueContainer = new HBox(10);
+        valueContainer.setAlignment(Pos.CENTER);
         
-        Button dayButton = new Button("近一天");
-        Button weekButton = new Button("近一週");
-        Button monthButton = new Button("近一個月");
+        // 金錢圖標
+        Label iconLabel = new Label("💵");
+        iconLabel.setFont(Font.font(20));
+        iconLabel.setStyle("-fx-effect: dropshadow(three-pass-box, rgba(0,0,0,0.5), 2, 0, 0, 1);");
         
-        // 設置按鈕樣式
-        String timeButtonStyle = "-fx-background-color: #DDDDDD; -fx-text-fill: #555555; -fx-font-size: 11px; -fx-background-radius: 12; -fx-padding: 3 8 3 8;";
-        String timeButtonActiveStyle = "-fx-background-color: " + RICH_MIDTONE_RED + "; -fx-text-fill: white; -fx-font-size: 11px; -fx-background-radius: 12; -fx-padding: 3 8 3 8;";
+        // 消費數值標籤
+        medianExpenseValueLabel = new Label("載入中...");
+        medianExpenseValueLabel.setFont(Font.font("System", FontWeight.BOLD, 16));
+        medianExpenseValueLabel.setStyle("-fx-text-fill: #FFFFFF; " +
+                                        "-fx-background-color: linear-gradient(to right, #FFD700 0%, #FFA500 100%); " +
+                                        "-fx-background-radius: 15; " +
+                                        "-fx-padding: 8 20 8 20; " +
+                                        "-fx-border-color: rgba(255,255,255,0.3); " +
+                                        "-fx-border-width: 1; " +
+                                        "-fx-border-radius: 15; " +
+                                        "-fx-effect: dropshadow(three-pass-box, rgba(255,165,0,0.4), 5, 0, 0, 2);");
         
-        dayButton.setStyle(timeButtonStyle);
-        weekButton.setStyle(timeButtonStyle);
-        monthButton.setStyle(timeButtonActiveStyle); // 預設選中一個月
-        
-        // 設置按鈕點擊事件
-        dayButton.setOnAction(e -> {
-            // 更改按鈕樣式
-            dayButton.setStyle(timeButtonActiveStyle);
-            weekButton.setStyle(timeButtonStyle);
-            monthButton.setStyle(timeButtonStyle);
-            
-            // 強制更新顯示近一天的評論
-            updateRecentReviewsDisplay(1); // 1天
-        });
-        
-        weekButton.setOnAction(e -> {
-            // 更改按鈕樣式
-            dayButton.setStyle(timeButtonStyle);
-            weekButton.setStyle(timeButtonActiveStyle);
-            monthButton.setStyle(timeButtonStyle);
-            
-            // 強制更新顯示近一週的評論
-            updateRecentReviewsDisplay(7); // 7天
-        });
-        
-        monthButton.setOnAction(e -> {
-            // 更改按鈕樣式
-            dayButton.setStyle(timeButtonStyle);
-            weekButton.setStyle(timeButtonStyle);
-            monthButton.setStyle(timeButtonActiveStyle);
-            
-            // 強制更新顯示近一個月的評論
-            updateRecentReviewsDisplay(30); // 30天
-        });
+        valueContainer.getChildren().addAll(iconLabel, medianExpenseValueLabel);
+        medianExpenseBox.getChildren().addAll(titleLabel, valueContainer);
         
         // 添加懸停效果
-        addHoverEffect(dayButton, timeButtonStyle, RICH_MIDTONE_RED);
-        addHoverEffect(weekButton, timeButtonStyle, RICH_MIDTONE_RED);
-        addHoverEffect(monthButton, timeButtonStyle, RICH_MIDTONE_RED);
+        medianExpenseBox.setOnMouseEntered(e -> {
+            medianExpenseBox.setStyle("-fx-background-color: linear-gradient(to bottom, #3A3A3A 0%, #4A4A4A 100%); " +
+                                     "-fx-background-radius: 10; " +
+                                     "-fx-border-color: linear-gradient(to right, #FFD700, #FFA500); " +
+                                     "-fx-border-width: 3; " +
+                                     "-fx-border-radius: 10; " +
+                                     "-fx-effect: dropshadow(three-pass-box, rgba(255,215,0,0.5), 12, 0, 0, 3);");
+        });
         
-        timeRangeButtonsBox.getChildren().addAll(dayButton, weekButton, monthButton);
+        medianExpenseBox.setOnMouseExited(e -> {
+            medianExpenseBox.setStyle("-fx-background-color: linear-gradient(to bottom, #2A2A2A 0%, #3A3A3A 100%); " +
+                                     "-fx-background-radius: 10; " +
+                                     "-fx-border-color: linear-gradient(to right, #FFD700, #FFA500); " +
+                                     "-fx-border-width: 2; " +
+                                     "-fx-border-radius: 10; " +
+                                     "-fx-effect: dropshadow(three-pass-box, rgba(255,215,0,0.3), 8, 0, 0, 2);");
+        });
         
-        // 在標題和時間範圍按鈕之間添加間距
-        HBox reviewHeaderBox = new HBox(10);
-        reviewHeaderBox.setAlignment(Pos.CENTER_LEFT);
-        reviewHeaderBox.getChildren().addAll(recentReviewsLabel, timeRangeButtonsBox);
-
-        // 創建近期評論列表容器
-        recentReviewsBox = new VBox(10);
-        recentReviewsBox.getStyleClass().add("recent-reviews-container");
-        recentReviewsBox.setPadding(new Insets(5, 0, 15, 0));
-        recentReviewsBox.setStyle("-fx-background-color: white; -fx-border-color: " + PALE_DARK_YELLOW + "; -fx-border-width: 1; -fx-padding: 10;");
-
-        getChildren().addAll(reviewHeaderBox, recentReviewsBox);
-        
-        // 確保載入時就顯示近一個月的評論
-        Platform.runLater(() -> updateRecentReviewsDisplay(30)); // 30天
+        return medianExpenseBox;
     }
+
     
     /**
      * 初始化餐廳分析區塊
@@ -251,59 +358,181 @@ public class RightPanel extends VBox {
         VBox.setVgrow(featuresArea, Priority.SOMETIMES);
         featuresArea.setStyle("-fx-background-color: white; -fx-border-color: " + PALE_DARK_YELLOW + "; -fx-border-width: 1; -fx-cursor: hand;");
         
-        // 優點分析
-        Label prosLabel = new Label("優點");
-        prosLabel.setFont(Font.font("System", FontWeight.BOLD, 16));
-        prosLabel.setStyle("-fx-text-fill: " + PALE_DARK_YELLOW + ";");
-        
-        prosArea = new TextArea();
-        prosArea.setPromptText("載入中...");
-        prosArea.setEditable(false);
-        prosArea.setWrapText(true);
-        prosArea.setPrefHeight(120);
-        prosArea.setMinHeight(120);
-        VBox.setVgrow(prosArea, Priority.SOMETIMES);
-        prosArea.setStyle("-fx-background-color: white; -fx-border-color: " + PALE_DARK_YELLOW + "; -fx-border-width: 1; -fx-cursor: hand;");
-        
-        // 缺點分析
-        Label consLabel = new Label("缺點");
-        consLabel.setFont(Font.font("System", FontWeight.BOLD, 16));
-        consLabel.setStyle("-fx-text-fill: " + PALE_DARK_YELLOW + ";");
-        
-        consArea = new TextArea();
-        consArea.setPromptText("載入中...");
-        consArea.setEditable(false);
-        consArea.setWrapText(true);
-        consArea.setPrefHeight(120);
-        consArea.setMinHeight(120);
-        VBox.setVgrow(consArea, Priority.SOMETIMES);
-        consArea.setStyle("-fx-background-color: white; -fx-border-color: " + PALE_DARK_YELLOW + "; -fx-border-width: 1; -fx-cursor: hand;");
-        
         // 為每個區域添加點擊事件
         featuresArea.setOnMouseClicked(e -> {
-            parentComponent.toggleAIChatView("特色討論", featuresArea.getText(), "餐廳特色");
-        });
-        
-        prosArea.setOnMouseClicked(e -> {
-            parentComponent.toggleAIChatView("優點討論", prosArea.getText(), "餐廳優點");
-        });
-        
-        consArea.setOnMouseClicked(e -> {
-            parentComponent.toggleAIChatView("缺點討論", consArea.getText(), "餐廳缺點");
+            if (isReviewDetailMode) {
+                // 如果在詳細模式，點擊返回
+                exitReviewDetailMode();
+            } else {
+                // 正常的 AI 聊天功能
+                parentComponent.toggleAIChatView("特色討論", featuresArea.getText(), "餐廳特色");
+            }
         });
         
         // 添加懸停效果
-        for (TextArea area : new TextArea[]{featuresArea, prosArea, consArea}) {
-            area.setOnMouseEntered(e -> {
-                area.setStyle("-fx-background-color: #F8F8F8; -fx-border-color: " + RICH_MIDTONE_RED + "; -fx-border-width: 1.5; -fx-cursor: hand;");
-            });
-            
-            area.setOnMouseExited(e -> {
-                area.setStyle("-fx-background-color: white; -fx-border-color: " + PALE_DARK_YELLOW + "; -fx-border-width: 1; -fx-cursor: hand;");
-            });
-        }
+        featuresArea.setOnMouseEntered(e -> {
+            if (isReviewDetailMode) {
+                featuresArea.setStyle("-fx-background-color: #F8F8F8; -fx-border-color: " + RICH_MIDTONE_RED + "; -fx-border-width: 1.5; -fx-cursor: hand;");
+            } else {
+                featuresArea.setStyle("-fx-background-color: #F8F8F8; -fx-border-color: " + RICH_MIDTONE_RED + "; -fx-border-width: 1.5; -fx-cursor: hand;");
+            }
+        });
         
-        getChildren().addAll(featuresLabel, featuresArea, prosLabel, prosArea, consLabel, consArea);
+        featuresArea.setOnMouseExited(e -> {
+            if (isReviewDetailMode) {
+                featuresArea.setStyle("-fx-background-color: white; -fx-border-color: " + RICH_MIDTONE_RED + "; -fx-border-width: 1; -fx-cursor: hand;");
+            } else {
+                featuresArea.setStyle("-fx-background-color: white; -fx-border-color: " + PALE_DARK_YELLOW + "; -fx-border-width: 1; -fx-cursor: hand;");
+            }
+        });
+        
+        getChildren().addAll(featuresLabel, featuresArea);
+    }
+    
+    /**
+     * 進入近期評論詳細模式
+     */
+    private void enterReviewDetailMode() {
+        System.out.println("🎯 進入近期評論詳細模式");
+        isReviewDetailMode = true;
+        
+        // 保存原始特色內容
+        originalFeaturesContent = featuresArea.getText();
+        
+        // 創建詳細評論視圖
+        VBox detailView = createDetailedReviewView();
+        
+        // 將詳細視圖內容設置到特色區域
+        featuresArea.clear();
+        featuresArea.setStyle("-fx-background-color: white; -fx-border-color: " + RICH_MIDTONE_RED + "; -fx-border-width: 2; -fx-cursor: hand;");
+        
+        StringBuilder detailContent = new StringBuilder();
+        detailContent.append("📊 近期評論詳細分析模式\n");
+        detailContent.append("━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+        detailContent.append("📅 當前顯示範圍: 近 ").append(currentSelectedDays).append(" 天\n");
+        detailContent.append("🔍 餐廳: ").append(currentRestaurantName != null ? currentRestaurantName : "未選擇").append("\n");
+        detailContent.append("━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+        detailContent.append("📋 使用下方的時間軸來調整顯示範圍\n");
+        detailContent.append("🎚️ 拖動滑桿選擇要查看的天數範圍\n");
+        detailContent.append("━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+        detailContent.append("💡 點擊此區域可返回原來的特色分析");
+        
+        featuresArea.setText(detailContent.toString());
+    }
+    
+    /**
+     * 退出近期評論詳細模式
+     */
+    private void exitReviewDetailMode() {
+        System.out.println("🏠 退出近期評論詳細模式");
+        isReviewDetailMode = false;
+        
+        // 恢復原始特色內容
+        featuresArea.setText(originalFeaturesContent);
+        featuresArea.setStyle("-fx-background-color: white; -fx-border-color: " + PALE_DARK_YELLOW + "; -fx-border-width: 1; -fx-cursor: hand;");
+    }
+    
+    /**
+     * 創建詳細評論視圖
+     */
+    private VBox createDetailedReviewView() {
+        VBox detailView = new VBox(10);
+        detailView.setPadding(new Insets(15));
+        detailView.setStyle("-fx-background-color: white; -fx-background-radius: 5;");
+        
+        // 標題
+        Label titleLabel = new Label("📊 近期評論詳細分析");
+        titleLabel.setFont(Font.font("System", FontWeight.BOLD, 16));
+        titleLabel.setStyle("-fx-text-fill: " + PALE_DARK_YELLOW + ";");
+        
+        // 時間軸控制
+        Label sliderLabel = new Label("📅 選擇時間範圍：");
+        sliderLabel.setStyle("-fx-text-fill: " + PALE_DARK_YELLOW + "; -fx-font-weight: bold;");
+        
+        Slider timeSlider = new Slider(1, 90, currentSelectedDays);
+        timeSlider.setShowTickLabels(true);
+        timeSlider.setShowTickMarks(true);
+        timeSlider.setMajorTickUnit(15);
+        timeSlider.setMinorTickCount(2);
+        timeSlider.setBlockIncrement(1);
+        timeSlider.setStyle("-fx-control-inner-background: " + RICH_LIGHT_GREEN + ";");
+        
+        Label daysLabel = new Label("近 " + currentSelectedDays + " 天");
+        daysLabel.setStyle("-fx-text-fill: " + RICH_MIDTONE_RED + "; -fx-font-weight: bold;");
+        
+        // 時間軸變更事件
+        timeSlider.valueProperty().addListener((obs, oldVal, newVal) -> {
+            int days = newVal.intValue();
+            currentSelectedDays = days;
+            daysLabel.setText("近 " + days + " 天");
+            
+            // 更新按鈕選中狀態
+            String normalStyle = "-fx-background-color: #E67649; -fx-text-fill: white; -fx-background-radius: 15; -fx-padding: 5 10 5 10; -fx-font-size: 11px;";
+            String activeStyle = "-fx-background-color: #8B4513; -fx-text-fill: white; -fx-background-radius: 15; -fx-padding: 5 10 5 10; -fx-font-size: 11px; -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.4), 4, 0, 0, 1);";
+            
+            monthButton.setStyle(normalStyle);
+            weekButton.setStyle(normalStyle);
+            dayButton.setStyle(normalStyle);
+            
+            if (days <= 1) {
+                dayButton.setStyle(activeStyle);
+            } else if (days <= 7) {
+                weekButton.setStyle(activeStyle);
+            } else if (days >= 28) {
+                monthButton.setStyle(activeStyle);
+            }
+            
+            // 實時更新評論顯示
+            updateRecentReviewsDisplay(days);
+        });
+        
+        // 快速選擇按鈕
+        HBox quickSelectBox = new HBox(10);
+        quickSelectBox.setAlignment(Pos.CENTER);
+        
+        Button day1Btn = new Button("今天");
+        Button day3Btn = new Button("3天");
+        Button week1Btn = new Button("1週");
+        Button week2Btn = new Button("2週");
+        Button month1Btn = new Button("1月");
+        Button month3Btn = new Button("3月");
+        
+        String quickBtnStyle = "-fx-background-color: #F0F0F0; -fx-text-fill: #333; -fx-background-radius: 12; -fx-padding: 3 8 3 8; -fx-font-size: 10px;";
+        
+        day1Btn.setStyle(quickBtnStyle);
+        day3Btn.setStyle(quickBtnStyle);
+        week1Btn.setStyle(quickBtnStyle);
+        week2Btn.setStyle(quickBtnStyle);
+        month1Btn.setStyle(quickBtnStyle);
+        month3Btn.setStyle(quickBtnStyle);
+        
+        day1Btn.setOnAction(e -> timeSlider.setValue(1));
+        day3Btn.setOnAction(e -> timeSlider.setValue(3));
+        week1Btn.setOnAction(e -> timeSlider.setValue(7));
+        week2Btn.setOnAction(e -> timeSlider.setValue(14));
+        month1Btn.setOnAction(e -> timeSlider.setValue(30));
+        month3Btn.setOnAction(e -> timeSlider.setValue(90));
+        
+        quickSelectBox.getChildren().addAll(day1Btn, day3Btn, week1Btn, week2Btn, month1Btn, month3Btn);
+        
+        // 返回按鈕
+        Button backButton = new Button("🏠 返回特色分析");
+        backButton.setStyle("-fx-background-color: " + RICH_MIDTONE_RED + "; -fx-text-fill: white; -fx-background-radius: 5; -fx-padding: 8 15 8 15;");
+        backButton.setOnAction(e -> exitReviewDetailMode());
+        
+        detailView.getChildren().addAll(
+            titleLabel,
+            new Separator(),
+            sliderLabel,
+            timeSlider,
+            daysLabel,
+            new Label("🎯 快速選擇："),
+            quickSelectBox,
+            new Separator(),
+            backButton
+        );
+        
+        return detailView;
     }
     
     /**
@@ -358,41 +587,12 @@ public class RightPanel extends VBox {
     }
     
     /**
-     * 更新近期評論顯示
+     * 更新近期評論顯示 (已移至側欄)
+     * 此方法保留以維持向後相容性，但功能已移至 RecentReviewsSidebar
      */
+    @Deprecated
     public void updateRecentReviewsDisplay(int days) {
-        System.out.println("右側面板更新近期評論顯示，顯示近 " + days + " 天的評論...");
-        
-        // 清空現有內容
-        recentReviewsBox.getChildren().clear();
-        
-        // 添加載入指示
-        Label loadingLabel = new Label("正在載入近 " + days + " 天的評論...");
-        loadingLabel.setStyle("-fx-text-fill: #777777; -fx-font-style: italic;");
-        recentReviewsBox.getChildren().add(loadingLabel);
-        
-        // 檢查是否有設置當前JSON檔案
-        if (currentJsonFilePath == null || currentJsonFilePath.isEmpty()) {
-            recentReviewsBox.getChildren().clear();
-            Label errorLabel = new Label("尚未載入餐廳資料");
-            errorLabel.setStyle("-fx-text-fill: #E03C31; -fx-font-style: italic;");
-            recentReviewsBox.getChildren().add(errorLabel);
-            return;
-        }
-        
-        // 直接使用 Google Maps API 獲取評論
-        String placeId = extractPlaceIdFromFilename(currentJsonFilePath);
-        if (placeId != null && !placeId.isEmpty()) {
-            // 使用地點ID直接從API獲取評論
-            System.out.println("使用地點ID從API直接獲取評論: " + placeId);
-            reviewsManager.fetchAndDisplayReviews(placeId, days, recentReviewsBox, parentComponent);
-        } else {
-            // 如果無法從檔名提取地點ID，則使用JSON檔案中的評論
-            System.out.println("無法從檔名提取地點ID，使用JSON檔案中的評論: " + currentJsonFilePath);
-            reviewsManager.updateRecentReviewsDisplay(currentJsonFilePath, days, recentReviewsBox, parentComponent);
-        }
-        
-        // 注意：系統不再使用範例資料，而是從API或JSON獲取真實評論
+        System.out.println("⚠️ updateRecentReviewsDisplay 已棄用，功能已移至 RecentReviewsSidebar");
     }
     
     /**
@@ -415,53 +615,11 @@ public class RightPanel extends VBox {
     }
     
     /**
-     * 使用示例數據填充近期評論容器
-     * 保留為備用方法，以防API或JSON數據出問題時使用
-     * 注意：此方法已不再主動調用，僅作為備用方案保留
+     * 🗑️ 已移除範例數據方法 - 功能已移至側欄
      */
+    @Deprecated
     private void updateRecentReviewsWithSampleData(int days) {
-        System.out.println("警告：正在使用範例資料代替真實資料！");
-        // 清空現有內容
-        recentReviewsBox.getChildren().clear();
-        
-        // 示例評論數據
-        String[][] reviewData;
-        if (days <= 1) {
-            // 今天的評論
-            reviewData = new String[][] {
-                {"今天", "李小姐", "4.5", "服務態度很好，餐點美味！老闆親切有禮，會再來。"},
-                {"今天", "張先生", "4.0", "食物好吃，但環境有點擁擠。"}
-            };
-        } else if (days <= 7) {
-            // 一週內的評論
-            reviewData = new String[][] {
-                {"今天", "李小姐", "4.5", "服務態度很好，餐點美味！老闆親切有禮，會再來。"},
-                {"今天", "張先生", "4.0", "食物好吃，但環境有點擁擠。"},
-                {"昨天", "王太太", "5.0", "這家店的特色料理實在太棒了，强烈推薦！"},
-                {"3天前", "林先生", "3.5", "價格有點貴，但口味不錯。"},
-                {"5天前", "陳太太", "4.0", "乾淨舒適的環境，餐點也相當美味。"}
-            };
-        } else {
-            // 一個月內的評論
-            reviewData = new String[][] {
-                {"今天", "李小姐", "4.5", "服務態度很好，餐點美味！老闆親切有禮，會再來。"},
-                {"今天", "張先生", "4.0", "食物好吃，但環境有點擁擠。"},
-                {"昨天", "王太太", "5.0", "這家店的特色料理實在太棒了，强烈推薦！"},
-                {"3天前", "林先生", "3.5", "價格有點貴，但口味不錯。"},
-                {"5天前", "陳太太", "4.0", "乾淨舒適的環境，餐點也相當美味。"},
-                {"1週前", "黃小姐", "4.5", "服務生態度友善，餐點份量十足。"},
-                {"10天前", "吳先生", "3.0", "等待時間有點長，但食物品質還不錯。"},
-                {"2週前", "謝太太", "4.0", "適合家庭聚餐，菜單選擇多樣。"},
-                {"3週前", "鄭先生", "4.5", "食材新鮮，價格合理，推薦！"},
-                {"1個月前", "劉小姐", "5.0", "絕對是我吃過最好吃的餐廳之一，每道菜都很用心。"}
-            };
-        }
-        
-        // 為每條評論創建UI元素
-        for (String[] review : reviewData) {
-            VBox reviewCard = createReviewCard(review[0], review[1], Double.parseDouble(review[2]), review[3]);
-            recentReviewsBox.getChildren().add(reviewCard);
-        }
+        System.out.println("⚠️ updateRecentReviewsWithSampleData 已棄用，功能已移至 RecentReviewsSidebar");
     }
     
     /**
@@ -511,67 +669,16 @@ public class RightPanel extends VBox {
      * 更新平均消費中位數顯示
      */
     public void updateMedianExpense(String medianExpense) {
-        if (ratingsBox != null && !medianExpense.equals("未知")) {
-            // 檢查是否已經有消費標籤
-            boolean hasExpenseLabel = false;
-            HBox expenseBox = null;
-            
-            // 使用索引遍歷而不是迭代器，避免 ConcurrentModificationException
-            for (int i = 0; i < ratingsBox.getChildren().size(); i++) {
-                Node node = ratingsBox.getChildren().get(i);
-                if (node instanceof HBox && ((HBox) node).getId() != null && ((HBox) node).getId().equals("expenseBox")) {
-                    hasExpenseLabel = true;
-                    // 更新現有標籤
-                    expenseBox = (HBox) node;
-                    // 第二個元素是VBox，不是Label
-                    VBox labelBox = (VBox) expenseBox.getChildren().get(1);
-                    // 從labelBox中獲取第二個元素，即expenseValueLabel
-                    Label expenseValueLabel = (Label) labelBox.getChildren().get(1);
-                    expenseValueLabel.setText(medianExpense);
-                    break;
-                }
+        if (medianExpenseValueLabel != null) {
+            if (!medianExpense.equals("未知") && !medianExpense.isEmpty()) {
+                medianExpenseValueLabel.setText(medianExpense);
+                System.out.println("✅ 已更新消費中位數顯示: " + medianExpense);
+            } else {
+                medianExpenseValueLabel.setText("暫無資料");
+                System.out.println("⚠️ 消費中位數資料不可用");
             }
-            
-            // 如果沒有消費標籤，創建一個新的
-            if (!hasExpenseLabel) {
-                expenseBox = new HBox(10);
-                expenseBox.setId("expenseBox");
-                expenseBox.setAlignment(Pos.CENTER_LEFT);
-                expenseBox.setPadding(new Insets(10, 10, 10, 10));
-                expenseBox.setStyle("-fx-background-color: rgba(111, 103, 50, 0.15); -fx-background-radius: 5; -fx-border-color: rgba(111, 103, 50, 0.3); -fx-border-radius: 5; -fx-border-width: 1;");
-                
-                // 創建一個小圖標區域
-                StackPane iconPane = new StackPane();
-                iconPane.setMinSize(24, 24);
-                iconPane.setMaxSize(24, 24);
-                iconPane.setStyle("-fx-background-color: #3A7734; -fx-background-radius: 12;");
-                
-                Label iconLabel = new Label("$");
-                iconLabel.setStyle("-fx-text-fill: white; -fx-font-weight: bold;");
-                iconPane.getChildren().add(iconLabel);
-                
-                // 創建標籤和值的VBox
-                VBox labelBox = new VBox(3);
-                
-                Label expenseLabel = new Label("平均消費中位數");
-                expenseLabel.setStyle("-fx-text-fill: " + PALE_DARK_YELLOW + "; -fx-font-weight: bold;");
-                
-                Label expenseValueLabel = new Label(medianExpense);
-                expenseValueLabel.setStyle("-fx-text-fill: #3A7734; -fx-font-weight: bold; -fx-font-size: 14px;");
-                
-                labelBox.getChildren().addAll(expenseLabel, expenseValueLabel);
-                
-                // 將圖標和標籤添加到HBox
-                expenseBox.getChildren().addAll(iconPane, labelBox);
-                
-                // 添加分隔線
-                Separator separator = new Separator();
-                separator.setStyle("-fx-background-color: " + PALE_DARK_YELLOW + "; -fx-opacity: 0.3;");
-                
-                // 將消費標籤和分隔線添加到評分區域的頂部
-                ratingsBox.getChildren().add(0, expenseBox);
-                ratingsBox.getChildren().add(1, separator);
-            }
+        } else {
+            System.out.println("❌ 消費中位數標籤尚未初始化");
         }
     }
     
@@ -580,6 +687,71 @@ public class RightPanel extends VBox {
      */
     public Map<String, ProgressBar> getRatingBars() {
         return ratingBars;
+    }
+    
+    /**
+     * 獲取評分數值標籤
+     */
+    public Map<String, Label> getRatingValueLabels() {
+        return ratingValueLabels;
+    }
+    
+    /**
+     * 更新評分顯示（同時更新柱狀圖和數值）
+     * @param category 評分類別
+     * @param rating 評分值 (0.0 - 5.0)
+     */
+    public void updateRatingDisplay(String category, double rating) {
+        System.out.println("🎯 更新評分顯示: " + category + " = " + rating);
+        
+        // 更新數值標籤
+        Label valueLabel = ratingValueLabels.get(category);
+        if (valueLabel != null) {
+            valueLabel.setText(String.format("%.1f", rating));
+            System.out.println("✅ 已更新數值標籤: " + category + " = " + String.format("%.1f", rating));
+        } else {
+            System.out.println("❌ 找不到數值標籤: " + category);
+        }
+        
+        // 🎯 更新柱狀圖高度
+        updateBarHeight(category, rating);
+    }
+    
+    /**
+     * 更新柱狀圖高度
+     * @param category 評分類別
+     * @param rating 評分值 (0.0 - 5.0)
+     */
+    private void updateBarHeight(String category, double rating) {
+        // 在 ratingsBox 中尋找對應的柱狀條
+        for (javafx.scene.Node node : ratingsBox.getChildren()) {
+            if (node instanceof VBox) {
+                VBox itemBox = (VBox) node;
+                // 尋找柱狀圖容器（第二個子元素）
+                if (itemBox.getChildren().size() >= 2 && itemBox.getChildren().get(1) instanceof VBox) {
+                    VBox barContainer = (VBox) itemBox.getChildren().get(1);
+                    // 尋找柱狀條（barContainer 的子元素）
+                    for (javafx.scene.Node barNode : barContainer.getChildren()) {
+                        if (barNode instanceof Region && barNode.getUserData() != null) {
+                            String userData = (String) barNode.getUserData();
+                            if (userData.equals(category + "_bar")) {
+                                Region barFill = (Region) barNode;
+                                // 🎯 根據評分計算柱狀圖高度（0-5分對應0-35px）
+                                double targetHeight = (rating / 5.0) * 35;
+                                barFill.setMinHeight(targetHeight);
+                                barFill.setPrefHeight(targetHeight);
+                                barFill.setMaxHeight(targetHeight);
+                                
+                                System.out.println("✅ 已更新柱狀圖: " + category + " 高度 = " + targetHeight + "px");
+                                return;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        System.out.println("❌ 找不到柱狀圖: " + category);
     }
     
     /**
@@ -604,20 +776,6 @@ public class RightPanel extends VBox {
     }
     
     /**
-     * 獲取優點分析文本區域
-     */
-    public TextArea getProsArea() {
-        return prosArea;
-    }
-    
-    /**
-     * 獲取缺點分析文本區域
-     */
-    public TextArea getConsArea() {
-        return consArea;
-    }
-    
-    /**
      * 清空所有數據顯示
      */
     public void clearDataDisplay(String message) {
@@ -628,12 +786,9 @@ public class RightPanel extends VBox {
         
         // 更新文字區域顯示
         featuresArea.setText(message);
-        prosArea.setText(message);
-        consArea.setText(message);
         
-        // 清空評論區域
-        recentReviewsBox.getChildren().clear();
-        recentReviewsBox.getChildren().add(new Label(message));
+        // 評論區域已移至側欄，不再需要清空
+        System.out.println("📝 評論區域功能已移至側欄");
     }
     
     /**
@@ -641,5 +796,117 @@ public class RightPanel extends VBox {
      */
     public void setCurrentJsonFilePath(String jsonFilePath) {
         this.currentJsonFilePath = jsonFilePath;
+    }
+    
+    /**
+     * 將本地 JSON 檔案內容更新到經營建議功能
+     * @param jsonFilePath JSON 檔案路徑
+     * @param totalReviews 總評論數
+     * @param validReviews 有效評論數
+     * @param allComments 所有評論內容
+     */
+    public void updateSuggestionsFromJsonData(String jsonFilePath, int totalReviews, int validReviews, String allComments) {
+        // 更新特色區域，顯示本地 JSON 資料統計
+        StringBuilder analysisInfo = new StringBuilder();
+        analysisInfo.append("📁 本地資料分析\n");
+        analysisInfo.append("━━━━━━━━━━━━━━━━\n");
+        analysisInfo.append("📊 資料來源: ").append(jsonFilePath).append("\n");
+        analysisInfo.append("📈 總評論數: ").append(totalReviews).append(" 條\n");
+        analysisInfo.append("✅ 有效評論: ").append(validReviews).append(" 條\n");
+        analysisInfo.append("━━━━━━━━━━━━━━━━\n");
+        analysisInfo.append("💡 點擊此區域可進行 AI 互動分析\n");
+        analysisInfo.append("🎯 經營建議將基於這些本地評論資料生成");
+        
+        Platform.runLater(() -> {
+            featuresArea.setText(analysisInfo.toString());
+            
+            // 同時通知父元件可以使用這些資料進行經營建議
+            System.out.println("✅ 本地 JSON 資料已載入至經營建議系統");
+            System.out.println("📝 可用於 AI 分析的評論字數: " + allComments.length() + " 字元");
+        });
+    }
+    
+    /**
+     * 設置當前搜尋到的餐廳資訊
+     */
+    public void setCurrentRestaurantInfo(String name, String id, String placeId) {
+        this.currentRestaurantName = name;
+        this.currentRestaurantId = id;
+        this.currentPlaceId = placeId;
+        
+        // 🚫 移除自動載入評論的邏輯 - 讓用戶手動點擊時間按鈕來載入評論
+        // 只設置餐廳資訊，不自動載入評論
+        System.out.println("✅ 已設置餐廳資訊: " + name + " (ID: " + id + ", PlaceID: " + placeId + ")");
+        System.out.println("💡 用戶可點擊時間按鈕來載入對應時間範圍的評論");
+    }
+    
+    /**
+     * 獲取當前餐廳 ID
+     * @return 當前餐廳的 ID，如果未設置則返回 null
+     */
+    public String getCurrentRestaurantId() {
+        return currentRestaurantId;
+    }
+    
+    /**
+     * 獲取當前餐廳名稱
+     * @return 當前餐廳的名稱，如果未設置則返回 null
+     */
+    public String getCurrentRestaurantName() {
+        return currentRestaurantName;
+    }
+    
+    /**
+     * 獲取當前餐廳 Place ID
+     * @return 當前餐廳的 Place ID，如果未設置則返回 null
+     */
+    public String getCurrentPlaceId() {
+        return currentPlaceId;
+    }
+    
+    /**
+     * 更新分析區域（優點和缺點）
+     * 這個方法用於相容性，實際上我們只更新特色區域
+     */
+    public void updateAnalysisAreas(String pros, String cons) {
+        // 將優點和缺點資訊整合到特色區域中
+        String combinedText = featuresArea.getText();
+        if (!combinedText.contains("優點") && !combinedText.contains("注意")) {
+            combinedText += "\n\n" + pros + "\n\n" + cons;
+            featuresArea.setText(combinedText);
+        }
+    }
+    
+    /**
+     * 獲取更深的顏色（用於漸層效果）
+     */
+    private String getDarkerColor(String color) {
+        switch (color) {
+            case "#2E7D32": return "#1B5E20"; // 深綠
+            case "#D32F2F": return "#B71C1C"; // 深紅
+            default: return "#D4532A"; // 深橘色（默認）
+        }
+    }
+    
+    /**
+     * 獲取帶透明度的顏色（用於陰影效果）
+     */
+    private String getColorWithAlpha(String color, double alpha) {
+        switch (color) {
+            case "#2E7D32": return "rgba(46, 125, 50, " + alpha + ")"; // 綠色
+            case "#D32F2F": return "rgba(211, 47, 47, " + alpha + ")"; // 紅色
+            default: return "rgba(230, 118, 73, " + alpha + ")"; // 橘色（默認）
+        }
+    }
+    
+    /**
+     * 更新 AI 對話的餐廳特色資訊
+     */
+    public void updateAIChatFeatures(String featuresText) {
+        if (chatAdvisor == null) {
+            chatAdvisor = new bigproject.ai.ChatRestaurantAdvisor();
+        }
+        chatAdvisor.setRestaurantFeatures(featuresText);
+        System.out.println("✅ 已更新 AI 對話的餐廳特色資訊");
     }
 } 

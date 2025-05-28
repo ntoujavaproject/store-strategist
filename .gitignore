@@ -46,4 +46,13 @@ ENV/
 /logs/
 *.tmp
 
+# 臨時評分分析檔案
+rating_analysis_*.json
+
+# Chat 歷史檔案（如果太大）
+chat_history/*.json
+
+# 發布相關臨時檔案
+release-notes.md
+
 # JSON data (如果太大且屬於測試數據，可考慮排除)

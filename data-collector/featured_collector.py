@@ -417,39 +417,81 @@ def main():
     
     args = parser.parse_args()
     
-    # 檢查參數
+    # 🔧 檢查參數
     if not args.id and not args.search:
-        print("錯誤: 必須提供 --id 或 --search 參數")
+        print("ERROR: 必須提供 --id 或 --search 參數")
         parser.print_help()
-        return
-    
-    # 創建收集器
-    collector = FeaturedCollector()
-    
-    # 執行收集
-    if args.id:
-        results = collector.collect_by_id(args.id, args.name, args.pages)
-    else:
-        results = collector.collect_by_search(args.search, args.pages)
-    
-    if results:
-        # 保存結果
-        collector.save_to_file(args.output)
-        
-        # 顯示摘要
-        print("\n" + "="*50)
-        print("收集完成!")
-        print(f"餐廳名稱: {results['restaurant_name']}")
-        print(f"總評論數: {results['total_reviews']}")
-        print(f"精選評論: {len(results['featured_reviews'])}")
-        print(f"精選照片: {len(results['featured_photos'])}")
-        if results['total_reviews'] > 0:
-            percentage = len(results['featured_reviews']) / results['total_reviews'] * 100
-            print(f"精選比例: {percentage:.1f}%")
-        print("="*50)
-    else:
-        print("收集失敗!")
         sys.exit(1)
+    
+    try:
+        print(f"🔍 [PYTHON] 開始收集程序")
+        print(f"🔍 [PYTHON] 餐廳ID: {args.id}")
+        print(f"🔍 [PYTHON] 餐廳名稱: {args.name}")
+        print(f"🔍 [PYTHON] 頁數: {args.pages}")
+        
+        # 創建收集器
+        collector = FeaturedCollector()
+        
+        # 執行收集
+        results = None
+        if args.id:
+            print(f"🔍 [PYTHON] 使用餐廳ID收集資料...")
+            results = collector.collect_by_id(args.id, args.name, args.pages)
+        else:
+            print(f"🔍 [PYTHON] 使用搜尋關鍵字收集資料...")
+            results = collector.collect_by_search(args.search, args.pages)
+        
+        if results:
+            # 保存結果
+            print(f"🔍 [PYTHON] 正在保存結果到 {args.output}...")
+            if collector.save_to_file(args.output):
+                # 顯示摘要
+                print("\n" + "="*50)
+                print("✅ [PYTHON] 收集完成!")
+                print(f"餐廳名稱: {results['restaurant_name']}")
+                print(f"總評論數: {results['total_reviews']}")
+                print(f"精選評論: {len(results['featured_reviews'])}")
+                print(f"精選照片: {len(results['featured_photos'])}")
+                if results['total_reviews'] > 0:
+                    percentage = len(results['featured_reviews']) / results['total_reviews'] * 100
+                    print(f"精選比例: {percentage:.1f}%")
+                print("="*50)
+                print("SUCCESS: 資料收集完成")
+                sys.exit(0)
+            else:
+                print("ERROR: 保存檔案失敗")
+                sys.exit(1)
+        else:
+            print("ERROR: 收集失敗 - 無法獲取餐廳資料")
+            print("可能原因:")
+            print("• 餐廳ID格式不正確")
+            print("• 餐廳不存在或已關閉")
+            print("• 網路連線問題")
+            print("• Google Maps 反爬蟲機制觸發")
+            sys.exit(1)
+            
+    except ImportError as e:
+        print(f"ERROR: 缺少必要的Python套件 - {e}")
+        print("請執行: pip install -r requirements.txt")
+        sys.exit(2)
+    except ConnectionError as e:
+        print(f"ERROR: 網路連線錯誤 - {e}")
+        print("請檢查網路連線並重試")
+        sys.exit(3)
+    except TimeoutError as e:
+        print(f"ERROR: 連線逾時 - {e}")
+        print("網路可能較慢，請稍後重試")
+        sys.exit(4)
+    except PermissionError as e:
+        print(f"ERROR: 檔案權限錯誤 - {e}")
+        print("請檢查輸出檔案的寫入權限")
+        sys.exit(5)
+    except Exception as e:
+        print(f"ERROR: 未預期的錯誤 - {e}")
+        print("詳細錯誤資訊:")
+        import traceback
+        traceback.print_exc()
+        sys.exit(99)
 
 if __name__ == '__main__':
     main() 

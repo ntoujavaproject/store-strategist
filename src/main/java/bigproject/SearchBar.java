@@ -97,8 +97,9 @@ public class SearchBar extends HBox {
         searchStackPane.setMaxWidth(600);
         searchStackPane.setPrefWidth(600);
         searchStackPane.setMinWidth(600);
-        searchStackPane.setMaxHeight(45);
-        searchStackPane.setPrefHeight(45);
+        // 🔧 移除高度限制，讓建議選單能夠完整顯示
+        // searchStackPane.setMaxHeight(45);
+        // searchStackPane.setPrefHeight(45);
         searchStackPane.setVisible(true);
         searchStackPane.setManaged(true);
         
@@ -112,6 +113,8 @@ public class SearchBar extends HBox {
         suggestionsBox.setPrefWidth(600);
         suggestionsBox.setMinWidth(600);
         suggestionsBox.setMaxWidth(600);
+        // 🔧 設定建議選單的偏好高度和最大高度
+        suggestionsBox.setPrefHeight(500);
         suggestionsBox.setMaxHeight(500);
         
         // 創建滾動面板來包裹建議選單
@@ -120,6 +123,8 @@ public class SearchBar extends HBox {
         suggestionsScroll.setHbarPolicy(ScrollBarPolicy.NEVER);
         suggestionsScroll.setVbarPolicy(ScrollBarPolicy.AS_NEEDED);
         suggestionsScroll.setStyle("-fx-background-color: transparent; -fx-background: transparent; -fx-border-color: transparent;");
+        // 🔧 設定滾動面板的偏好高度和最大高度
+        suggestionsScroll.setPrefHeight(500);
         suggestionsScroll.setMaxHeight(500);
         suggestionsScroll.setVisible(false);
         suggestionsScroll.setPrefWidth(600);
@@ -130,13 +135,10 @@ public class SearchBar extends HBox {
         
         StackPane.setAlignment(suggestionsBox, Pos.TOP_LEFT);
         
-        // 添加到堆疊面板中
-        searchStackPane.getChildren().addAll(searchField, suggestionsScroll);
+        // 🔧 只將搜尋框添加到 StackPane，建議選單將作為浮動層添加到主容器
+        searchStackPane.getChildren().add(searchField);
         searchStackPane.setPrefWidth(Double.MAX_VALUE);
         VBox.setMargin(searchStackPane, new Insets(0, 0, 5, 0));
-        
-        // 搜尋組件將添加到容器中
-        suggestionsScroll.setTranslateY(45);
         
         // 創建搜索按鈕
         searchButton = new Button("搜尋");
@@ -160,6 +162,32 @@ public class SearchBar extends HBox {
         getChildren().add(searchStackPane);
         getChildren().add(searchButton);
         getChildren().add(rightSpacer);
+        
+        // 🔧 將建議選單作為浮動層添加到 SearchBar 容器中
+        getChildren().add(suggestionsScroll);
+        
+        // 🔧 關鍵設置：讓建議選單不參與佈局計算，成為真正的浮動元件
+        suggestionsScroll.setManaged(false); // 不參與父容器的佈局計算
+        suggestionsScroll.setViewOrder(-1); // 將建議選單置於最前方（z-index較高）
+        suggestionsScroll.setMouseTransparent(false); // 確保可以接收滑鼠事件
+        
+        // 🔧 設置建議選單的絕對位置，讓它浮動在搜尋框下方
+        // 計算搜尋框的起始位置（左間距 + 標籤 + 一些間距）
+        suggestionsScroll.setLayoutX(120); // 大約搜尋框的起始位置
+        suggestionsScroll.setLayoutY(70);  // 搜尋欄下方
+        
+        // 🔧 添加動態定位監聽器，當搜尋框位置改變時自動調整建議選單位置
+        searchStackPane.layoutBoundsProperty().addListener((obs, oldBounds, newBounds) -> {
+            if (suggestionsScroll.isVisible()) {
+                // 計算搜尋框在搜尋欄中的實際位置
+                double stackPaneX = searchStackPane.getLayoutX();
+                double stackPaneY = searchStackPane.getLayoutY() + searchStackPane.getHeight();
+                
+                // 設置建議選單的位置對齊搜尋框
+                suggestionsScroll.setLayoutX(stackPaneX);
+                suggestionsScroll.setLayoutY(stackPaneY);
+            }
+        });
     }
     
     /**
@@ -258,13 +286,20 @@ public class SearchBar extends HBox {
                             int hitsCount = searchResult.getInt("nbHits");
                             
                             if (hitsCount > 0) {
-                                // 顯示建議選單和滾動面板
-                                suggestionsScroll.setVisible(true);
-                                suggestionsBox.setVisible(true);
-                                
                                 // 取得搜尋結果
                                 JSONArray hits = searchResult.getJSONArray("hits");
                                 int limit = Math.min(hits.length(), 10);
+                                
+                                // 🔧 根據實際項目數量動態調整建議選單高度
+                                double itemHeight = 70.0;
+                                double containerPadding = 10.0;
+                                double calculatedHeight = Math.min(limit * itemHeight + containerPadding, 500.0);
+                                
+                                // 設定動態高度
+                                suggestionsBox.setPrefHeight(calculatedHeight);
+                                suggestionsBox.setMaxHeight(calculatedHeight);
+                                suggestionsScroll.setPrefHeight(calculatedHeight);
+                                suggestionsScroll.setMaxHeight(calculatedHeight);
                                 
                                 // 創建建議項目
                                 for (int i = 0; i < limit; i++) {
@@ -295,6 +330,16 @@ public class SearchBar extends HBox {
                                     
                                     suggestionsBox.getChildren().add(suggestionItem);
                                 }
+                                
+                                // 顯示建議選單和滾動面板
+                                suggestionsScroll.setVisible(true);
+                                suggestionsBox.setVisible(true);
+                                
+                                // 🔧 確保建議選單位置正確
+                                double stackPaneX = searchStackPane.getLayoutX();
+                                double stackPaneY = searchStackPane.getLayoutY() + searchStackPane.getHeight();
+                                suggestionsScroll.setLayoutX(stackPaneX);
+                                suggestionsScroll.setLayoutY(stackPaneY);
                             } else {
                                 suggestionsScroll.setVisible(false);
                                 suggestionsBox.setVisible(false);
@@ -429,13 +474,21 @@ public class SearchBar extends HBox {
             int hitsCount = searchResult.getInt("nbHits");
             
             if (hitsCount > 0) {
-                // 顯示建議選單和滾動面板
-                suggestionsScroll.setVisible(true);
-                suggestionsBox.setVisible(true);
-                
                 // 取得搜尋結果
                 JSONArray hits = searchResult.getJSONArray("hits");
                 int limit = Math.min(hits.length(), 10);
+                
+                // 🔧 根據實際項目數量動態調整建議選單高度
+                // 每個建議項約 70px 高度（包含 padding），加上容器的 padding
+                double itemHeight = 70.0;
+                double containerPadding = 10.0;
+                double calculatedHeight = Math.min(limit * itemHeight + containerPadding, 500.0);
+                
+                // 設定動態高度
+                suggestionsBox.setPrefHeight(calculatedHeight);
+                suggestionsBox.setMaxHeight(calculatedHeight);
+                suggestionsScroll.setPrefHeight(calculatedHeight);
+                suggestionsScroll.setMaxHeight(calculatedHeight);
                 
                 // 創建建議項目
                 for (int i = 0; i < limit; i++) {
@@ -459,6 +512,16 @@ public class SearchBar extends HBox {
                     
                     suggestionsBox.getChildren().add(suggestionItem);
                 }
+                
+                // 顯示建議選單和滾動面板
+                suggestionsScroll.setVisible(true);
+                suggestionsBox.setVisible(true);
+                
+                // 🔧 確保建議選單位置正確
+                double stackPaneX = searchStackPane.getLayoutX();
+                double stackPaneY = searchStackPane.getLayoutY() + searchStackPane.getHeight();
+                suggestionsScroll.setLayoutX(stackPaneX);
+                suggestionsScroll.setLayoutY(stackPaneY);
                 
                 // 確保滾動條回到頂部
                 suggestionsScroll.setVvalue(0);

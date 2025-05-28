@@ -47,7 +47,7 @@ public class DataManager {
                                            Map<String, ProgressBar> ratingBars,
                                            TextArea reviewsArea, 
                                            FlowPane photosContainer,
-                                           TextArea featuresArea, TextArea prosArea, TextArea consArea) {
+                                           TextArea featuresArea) {
         System.out.println("Loading data from: " + jsonFilePath);
         try {
             JSONArray reviews = loadReviewsFromJson(jsonFilePath);
@@ -61,18 +61,17 @@ public class DataManager {
                     updateReviewsArea(reviews, reviewsArea);
                     updatePhotosContainer(reviews, photosContainer); // 更新照片
                     featuresArea.setText("特色分析 (待實作)...");
-                    prosArea.setText("優點分析 (待實作)...");
-                    consArea.setText("缺點分析 (待實作)...");
                     String restaurantName = jsonFilePath.replace(".json", "").replace(" Info", "");
                     ratingsHeader.setText(restaurantName + " - 綜合評分");
                 });
             } else {
                 Platform.runLater(() -> clearRestaurantDataDisplay("無法從 " + jsonFilePath + " 載入評論資料",
-                                                                  ratingsHeader, ratingsBox, ratingBars, reviewsArea, photosContainer, featuresArea, prosArea, consArea));
+                                                                  ratingsHeader, ratingsBox, ratingBars, reviewsArea, photosContainer, featuresArea));
             }
-        } catch (IOException | JSONException e) {
+        } catch (Exception e) {
+            e.printStackTrace();
             Platform.runLater(() -> clearRestaurantDataDisplay("讀取檔案時發生錯誤: " + jsonFilePath,
-                                                                  ratingsHeader, ratingsBox, ratingBars, reviewsArea, photosContainer, featuresArea, prosArea, consArea));
+                                                                  ratingsHeader, ratingsBox, ratingBars, reviewsArea, photosContainer, featuresArea));
         }
     }
 
@@ -81,7 +80,7 @@ public class DataManager {
                                          Map<String, ProgressBar> ratingBars,
                                          TextArea reviewsArea,
                                          FlowPane photosContainer,
-                                         TextArea featuresArea, TextArea prosArea, TextArea consArea) {
+                                         TextArea featuresArea) {
         ratingsHeader.setText("綜合評分");
         ratingBars.values().forEach(bar -> bar.setProgress(0.0));
         ratingsBox.getChildren().removeIf(node -> node.getId() != null && node.getId().equals("message-label"));
@@ -93,8 +92,6 @@ public class DataManager {
         reviewsArea.setText("");
         photosContainer.getChildren().clear(); // 清空照片容器
         featuresArea.setText("");
-        prosArea.setText("");
-        consArea.setText("");
     }
 
     // --- Load JSON Array from File ---
@@ -147,9 +144,11 @@ public class DataManager {
 
     // --- Update Rating Bars ---
     private void updateRatingBars(Map<String, Double> averageScores, Map<String, ProgressBar> ratingBars) {
+        // 🎯 直接更新進度條，數值標籤的更新將由 RightPanel 的 updateRatingDisplay 方法處理
         ratingBars.forEach((category, bar) -> {
             double score = averageScores.getOrDefault(category, 0.0);
             bar.setProgress(score / 5.0);
+            System.out.println("更新 " + category + " 評分: " + score + "/5.0 (進度: " + (score/5.0) + ")");
         });
     }
 

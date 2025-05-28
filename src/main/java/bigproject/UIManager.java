@@ -765,7 +765,19 @@ public class UIManager {
         tipLabel.setWrapText(true);
         tipLabel.setTextAlignment(javafx.scene.text.TextAlignment.CENTER);
 
-        dataCollectionView.getChildren().addAll(titleLabel, restaurantLabel, progressContainer, tipLabel);
+        // 返回按鈕
+        Button backToSearchButton = new Button("🏠 返回搜尋首頁");
+        backToSearchButton.setStyle("-fx-background-color: #757575; -fx-text-fill: white; -fx-font-size: 14px; -fx-padding: 10 20; -fx-background-radius: 8;");
+        backToSearchButton.setOnAction(e -> {
+            // 返回搜尋首頁
+            returnToSearchHomePage();
+        });
+        
+        // 添加懸停效果
+        backToSearchButton.setOnMouseEntered(e -> backToSearchButton.setStyle("-fx-background-color: #616161; -fx-text-fill: white; -fx-font-size: 14px; -fx-padding: 10 20; -fx-background-radius: 8;"));
+        backToSearchButton.setOnMouseExited(e -> backToSearchButton.setStyle("-fx-background-color: #757575; -fx-text-fill: white; -fx-font-size: 14px; -fx-padding: 10 20; -fx-background-radius: 8;"));
+
+        dataCollectionView.getChildren().addAll(titleLabel, restaurantLabel, progressContainer, tipLabel, backToSearchButton);
 
         ScrollPane progressScrollPane = new ScrollPane(dataCollectionView);
         progressScrollPane.setFitToWidth(true);
@@ -861,6 +873,30 @@ public class UIManager {
             System.out.println("Switched back to Main Content View");
         } else {
             System.err.println("Error: Main center view is not the expected type.");
+        }
+    }
+    
+    /**
+     * 返回搜尋首頁
+     */
+    public void returnToSearchHomePage() {
+        try {
+            // 創建新的搜尋首頁實例
+            SearchHomePage searchHomePage = new SearchHomePage(primaryStage, 
+                (restaurantName, restaurantId, dataSource) -> {
+                    // 當用戶選擇餐廳後，重新初始化主分析界面
+                    // 這裡需要調用 compare 類的相關方法
+                    System.out.println("用戶選擇了餐廳：" + restaurantName + " (來源：" + dataSource + ")");
+                    // 暫時顯示主視圖，實際應該要重新初始化主分析界面
+                    showMainView();
+                }
+            );
+            searchHomePage.show();
+        } catch (Exception e) {
+            System.err.println("返回搜尋首頁時發生錯誤：" + e.getMessage());
+            e.printStackTrace();
+            // 如果出錯，至少返回到主視圖
+            showMainView();
         }
     }
 } 

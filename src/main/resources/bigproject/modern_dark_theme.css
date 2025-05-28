@@ -13,6 +13,493 @@
     -fx-font-family: "Serif";
 }
 
+/* ===== SUPERELLIPSE 圓弧效果 ===== */
+/* 定義不同大小的 superellipse 圓角 */
+
+/* 小型元件 - 輕微 superellipse */
+.superellipse-small {
+    -fx-background-radius: 8 8 8 8;
+    -fx-border-radius: 8 8 8 8;
+}
+
+/* 中型元件 - 標準 superellipse */
+.superellipse-medium {
+    -fx-background-radius: 16 16 16 16;
+    -fx-border-radius: 16 16 16 16;
+}
+
+/* 大型元件 - 明顯 superellipse */
+.superellipse-large {
+    -fx-background-radius: 24 24 24 24;
+    -fx-border-radius: 24 24 24 24;
+}
+
+/* 超大型元件 - 強烈 superellipse */
+.superellipse-xlarge {
+    -fx-background-radius: 32 32 32 32;
+    -fx-border-radius: 32 32 32 32;
+}
+
+/* 面板專用 - 不對稱 superellipse */
+.superellipse-panel {
+    -fx-background-radius: 20 20 20 20;
+    -fx-border-radius: 20 20 20 20;
+}
+
+/* 右側面板專用 - 左上角特殊圓角 */
+.superellipse-right-panel {
+    -fx-background-radius: 28 0 0 0;
+    -fx-border-radius: 28 0 0 0;
+}
+
+/* ===== 焦點效果 ===== */
+.text-field:focused,
+.text-area:focused,
+.button:focused,
+.toggle-button:focused,
+.combo-box:focused,
+.list-view:focused,
+.scroll-pane:focused {
+    -fx-background-insets: 0;
+    -fx-border-color: #777777;
+    -fx-border-width: 2px;
+    -fx-effect: dropshadow(gaussian, rgba(111, 103, 50, 0.4), 8, 0, 0, 0);
+}
+
+/* ===== 選中項目高亮 ===== */
+.list-view:focused > .virtual-flow > .clipped-container > .sheet > .list-cell:filled:selected,
+.table-view:focused > .virtual-flow > .clipped-container > .sheet > .table-row-cell:filled:selected,
+.table-view:focused > .virtual-flow > .clipped-container > .sheet > .table-row-cell > .table-cell:selected,
+.tree-view:focused > .virtual-flow > .clipped-container > .sheet > .tree-cell:filled:selected,
+.tree-table-view:focused > .virtual-flow > .clipped-container > .sheet > .tree-table-row-cell:filled:selected,
+.tree-table-view:focused > .virtual-flow > .clipped-container > .sheet > .tree-table-row-cell > .tree-table-cell:selected {
+    -fx-background: #555555;
+    -fx-text-fill: white;
+}
+
+.text-input:focused {
+    -fx-highlight-fill: #4a4a4a;
+    -fx-highlight-text-fill: white;
+}
+
+/* ===== 文字樣式 ===== */
+.label {
+    -fx-text-fill: #E0E0E0;
+}
+
+.star-rating {
+    -fx-text-fill: #E67649;
+    -fx-font-size: 1.1em;
+    -fx-scale-x: 1;
+    -fx-scale-y: 1;
+}
+
+.star-rating:hover {
+    -fx-scale-x: 1.25;
+    -fx-scale-y: 1.25;
+}
+
+.label-bright {
+    -fx-text-fill: #FFFFFF;
+    -fx-font-weight: bold;
+}
+
+/* ===== 輸入控件 - 套用 superellipse ===== */
+.text-area, .text-field, .list-view, .combo-box {
+    -fx-text-fill: #E0E0E0;
+    -fx-prompt-text-fill: #9E9E9E;
+    -fx-border-color: #555555;
+    -fx-border-width: 1px;
+    -fx-background-radius: 16 16 16 16; /* superellipse medium */
+    -fx-border-radius: 16 16 16 16;
+    -fx-effect: innershadow(gaussian, rgba(0,0,0,0.2), 3, 0, 0, 1);
+}
+
+.text-area .content {
+    -fx-background-color: -fx-control-inner-background;
+    -fx-background-radius: 16 16 16 16; /* 內容區域也有 superellipse */
+}
+
+/* ===== 搜尋欄 - ChatGPT 風格 + superellipse ===== */
+.bottom-bar {
+    -fx-background-color: transparent;
+    -fx-padding: 5 15 15 15;
+}
+
+.search-container {
+    -fx-background-color: rgba(44, 44, 44, 0.85);
+    -fx-background-radius: 32 32 32 32; /* superellipse xlarge */
+    -fx-border-radius: 32 32 32 32;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.4), 12, 0, 0, 3);
+    -fx-border-color: rgba(255, 255, 255, 0.1);
+    -fx-border-width: 1;
+}
+
+.bottom-bar .text-field {
+    -fx-background-color: rgba(58, 58, 58, 0.6);
+    -fx-text-fill: white;
+    -fx-prompt-text-fill: #9E9E9E;
+    -fx-background-radius: 28 28 28 28; /* superellipse large */
+    -fx-border-radius: 28 28 28 28;
+    -fx-border-color: rgba(255, 255, 255, 0.1);
+    -fx-padding: 12 18 12 18;
+    -fx-font-size: 14px;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.2), 4, 0, 0, 1);
+}
+
+.bottom-bar .button {
+    -fx-background-color: #E67649;
+    -fx-text-fill: white;
+    -fx-background-radius: 28 28 28 28; /* superellipse large */
+    -fx-border-radius: 28 28 28 28;
+    -fx-font-size: 14px;
+    -fx-padding: 12 24 12 24;
+    -fx-effect: dropshadow(gaussian, rgba(230, 118, 73, 0.3), 6, 0, 0, 2);
+}
+
+.bottom-bar .button:hover {
+    -fx-background-color: derive(#E67649, 15%);
+    -fx-effect: dropshadow(gaussian, rgba(230, 118, 73, 0.5), 8, 0, 0, 3);
+    -fx-scale-x: 1.02;
+    -fx-scale-y: 1.02;
+}
+
+.bottom-bar .button:pressed {
+    -fx-background-color: derive(#E67649, -10%);
+    -fx-scale-x: 0.98;
+    -fx-scale-y: 0.98;
+}
+
+/* ===== 按鈕 - superellipse 設計 ===== */
+.button, .toggle-button {
+    -fx-background-color: #424242;
+    -fx-text-fill: #FFFFFF;
+    -fx-background-radius: 20 20 20 20; /* superellipse panel */
+    -fx-border-radius: 20 20 20 20;
+    -fx-padding: 10 18 10 18;
+    -fx-cursor: hand;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.25), 4, 0, 0, 2);
+}
+
+.button:hover, .toggle-button:hover {
+    -fx-background-color: #555555;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.35), 6, 0, 0, 3);
+    -fx-scale-x: 1.02;
+    -fx-scale-y: 1.02;
+}
+
+.button:pressed, .toggle-button:selected {
+    -fx-background-color: #303030;
+    -fx-text-fill: #FFFFFF;
+    -fx-scale-x: 0.98;
+    -fx-scale-y: 0.98;
+}
+
+/* ===== 頂部欄 ===== */
+.top-bar {
+    -fx-background-color: rgba(111, 103, 50, 0.9);
+    -fx-padding: 12 20 12 20;
+    -fx-background-radius: 16 16 0 0; /* 頂部 superellipse */
+    -fx-border-radius: 16 16 0 0;
+}
+
+.top-bar .button {
+    -fx-background-color: #DCF2CC;
+    -fx-text-fill: #1F1F1F;
+    -fx-background-radius: 18 18 18 18; /* superellipse medium+ */
+    -fx-border-radius: 18 18 18 18;
+    -fx-effect: dropshadow(gaussian, rgba(111, 103, 50, 0.3), 4, 0, 0, 1);
+}
+
+.top-bar .button:hover {
+    -fx-background-color: derive(#DCF2CC, -8%);
+    -fx-effect: dropshadow(gaussian, rgba(111, 103, 50, 0.5), 6, 0, 0, 2);
+    -fx-scale-x: 1.05;
+    -fx-scale-y: 1.05;
+}
+
+/* ===== 內容面板 - superellipse 設計 ===== */
+.content-panel {
+    -fx-background-radius: 24 24 24 24; /* superellipse large */
+    -fx-border-radius: 24 24 24 24;
+    -fx-background-color: rgba(235, 218, 203, 0.9);
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.15), 8, 0, 0, 2);
+    -fx-padding: 20;
+}
+
+.right-panel {
+    -fx-background-radius: 28 0 0 0; /* 右側面板特殊 superellipse */
+    -fx-border-radius: 28 0 0 0;
+    -fx-background-color: #DCF2CC;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.15), 8, 0, -2, 2);
+    -fx-padding: 20;
+}
+
+/* ===== 滾動面板 - superellipse ===== */
+.scroll-pane {
+    -fx-background-color: transparent;
+    -fx-border-color: transparent;
+    -fx-background-radius: 20 20 20 20; /* superellipse panel */
+    -fx-border-radius: 20 20 20 20;
+}
+
+.scroll-pane > .viewport {
+    -fx-background-color: transparent;
+    -fx-background-radius: 20 20 20 20;
+    -fx-border-radius: 20 20 20 20;
+}
+
+/* ===== 滾動條 - superellipse 設計 ===== */
+.scroll-bar:horizontal, .scroll-bar:vertical {
+    -fx-background-color: transparent;
+    -fx-border-color: transparent;
+    -fx-background-radius: 8 8 8 8; /* superellipse small */
+    -fx-border-radius: 8 8 8 8;
+}
+
+.scroll-bar .track {
+    -fx-background-color: rgba(68, 68, 68, 0.3);
+    -fx-background-radius: 8 8 8 8;
+    -fx-border-radius: 8 8 8 8;
+}
+
+.scroll-bar .thumb {
+    -fx-background-color: rgba(111, 103, 50, 0.6);
+    -fx-background-radius: 8 8 8 8;
+    -fx-border-radius: 8 8 8 8;
+}
+
+.scroll-bar .thumb:hover {
+    -fx-background-color: rgba(111, 103, 50, 0.8);
+}
+
+.scroll-bar .thumb:pressed {
+    -fx-background-color: rgba(111, 103, 50, 1.0);
+}
+
+.increment-button, .decrement-button {
+    -fx-background-color: transparent;
+    -fx-background-radius: 6 6 6 6;
+    -fx-border-radius: 6 6 6 6;
+}
+
+/* ===== 圖表 - superellipse ===== */
+.chart {
+    -fx-background-color: rgba(47, 47, 47, 0.9);
+    -fx-background-radius: 20 20 20 20;
+    -fx-border-radius: 20 20 20 20;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.2), 6, 0, 0, 2);
+}
+
+.chart-plot-background {
+    -fx-background-color: rgba(58, 58, 58, 0.8);
+    -fx-background-radius: 16 16 16 16;
+    -fx-border-radius: 16 16 16 16;
+}
+
+/* ===== 競爭對手條目 - superellipse ===== */
+#competitor-entry {
+    -fx-background-color: rgba(255, 255, 255, 0.95);
+    -fx-background-radius: 18 18 18 18; /* superellipse medium+ */
+    -fx-border-radius: 18 18 18 18;
+    -fx-border-color: rgba(111, 103, 50, 0.3);
+    -fx-border-width: 1;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.1), 4, 0, 0, 1);
+    -fx-padding: 15;
+}
+
+#competitor-entry:hover {
+    -fx-background-color: rgba(255, 255, 255, 1.0);
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.2), 6, 0, 0, 2);
+    -fx-scale-x: 1.02;
+    -fx-scale-y: 1.02;
+}
+
+/* ===== 對話框 - superellipse ===== */
+.dialog-pane {
+    -fx-background-color: #2E2E2E;
+    -fx-background-radius: 24 24 24 24; /* superellipse large */
+    -fx-border-radius: 24 24 24 24;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.4), 12, 0, 0, 4);
+}
+
+.dialog-pane .label {
+    -fx-text-fill: #E0E0E0;
+}
+
+.dialog-pane > .button-bar > .container {
+    -fx-background-color: transparent;
+    -fx-padding: 10;
+}
+
+/* ===== 滑桿 - superellipse ===== */
+.slider .track {
+    -fx-background-color: rgba(68, 68, 68, 0.6);
+    -fx-background-radius: 12 12 12 12;
+    -fx-border-radius: 12 12 12 12;
+}
+
+.slider .thumb {
+    -fx-background-color: #E67649;
+    -fx-background-radius: 12 12 12 12;
+    -fx-border-radius: 12 12 12 12;
+    -fx-effect: dropshadow(gaussian, rgba(230, 118, 73, 0.4), 4, 0, 0, 1);
+}
+
+/* ===== 搜尋歷史對話框 - superellipse ===== */
+.search-history-dialog {
+    -fx-background-color: rgba(46, 46, 46, 0.95);
+    -fx-background-radius: 24 24 24 24;
+    -fx-border-radius: 24 24 24 24;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.3), 10, 0, 0, 3);
+}
+
+.search-history-field {
+    -fx-background-color: rgba(58, 58, 58, 0.8);
+    -fx-text-fill: white;
+    -fx-prompt-text-fill: #9E9E9E;
+    -fx-background-radius: 16 16 16 16;
+    -fx-border-radius: 16 16 16 16;
+    -fx-border-color: rgba(111, 103, 50, 0.3);
+    -fx-border-width: 1;
+    -fx-padding: 10 15 10 15;
+}
+
+.search-history-item {
+    -fx-background-color: transparent;
+    -fx-background-radius: 12 12 12 12;
+    -fx-border-radius: 12 12 12 12;
+    -fx-padding: 8 12 8 12;
+}
+
+.search-history-item:hover {
+    -fx-background-color: rgba(111, 103, 50, 0.2);
+    -fx-scale-x: 1.02;
+    -fx-scale-y: 1.02;
+}
+
+/* ===== 月報內容 - superellipse ===== */
+#monthly-report-content {
+    -fx-background-color: rgba(46, 46, 46, 0.9);
+    -fx-background-radius: 20 20 20 20;
+    -fx-border-radius: 20 20 20 20;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.2), 8, 0, 0, 2);
+}
+
+#monthly-report-content .chart {
+    -fx-background-radius: 16 16 16 16;
+    -fx-border-radius: 16 16 16 16;
+}
+
+#monthly-report-content .button {
+    -fx-background-color: #E67649;
+    -fx-text-fill: white;
+    -fx-background-radius: 18 18 18 18;
+    -fx-border-radius: 18 18 18 18;
+    -fx-effect: dropshadow(gaussian, rgba(230, 118, 73, 0.3), 4, 0, 0, 1);
+}
+
+#monthly-report-content .button:hover {
+    -fx-background-color: derive(#E67649, 10%);
+    -fx-effect: dropshadow(gaussian, rgba(230, 118, 73, 0.5), 6, 0, 0, 2);
+    -fx-scale-x: 1.05;
+    -fx-scale-y: 1.05;
+}
+
+/* ===== 特殊按鈕樣式 ===== */
+.button.primary {
+    -fx-background-color: #E67649;
+    -fx-text-fill: white;
+    -fx-background-radius: 22 22 22 22; /* 稍大的 superellipse */
+    -fx-border-radius: 22 22 22 22;
+    -fx-effect: dropshadow(gaussian, rgba(230, 118, 73, 0.4), 6, 0, 0, 2);
+}
+
+.button.primary:hover {
+    -fx-background-color: derive(#E67649, 15%);
+    -fx-effect: dropshadow(gaussian, rgba(230, 118, 73, 0.6), 8, 0, 0, 3);
+    -fx-scale-x: 1.05;
+    -fx-scale-y: 1.05;
+}
+
+.button.secondary {
+    -fx-background-color: transparent;
+    -fx-text-fill: #E67649;
+    -fx-border-color: #E67649;
+    -fx-border-width: 2;
+    -fx-background-radius: 20 20 20 20;
+    -fx-border-radius: 20 20 20 20;
+}
+
+.button.secondary:hover {
+    -fx-background-color: rgba(230, 118, 73, 0.1);
+    -fx-scale-x: 1.02;
+    -fx-scale-y: 1.02;
+}
+
+/* ===== 分頁標籤 - superellipse ===== */
+.tab-pane .tab-header-area .tab-header-background {
+    -fx-background-color: transparent;
+}
+
+.tab-pane .tab {
+    -fx-background-color: #333333;
+    -fx-background-radius: 12 12 0 0; /* 上方 superellipse */
+    -fx-border-radius: 12 12 0 0;
+    -fx-padding: 8 16 8 16;
+}
+
+.tab-pane .tab:selected {
+    -fx-background-color: #4D4D4D;
+    -fx-background-radius: 12 12 0 0;
+    -fx-border-radius: 12 12 0 0;
+}
+
+.tab-pane .tab:hover {
+    -fx-background-color: #404040;
+    -fx-scale-x: 1.02;
+    -fx-scale-y: 1.02;
+}
+
+/* ===== 評論卡片 - superellipse ===== */
+.review-card {
+    -fx-background-color: rgba(248, 248, 248, 0.95);
+    -fx-background-radius: 16 16 16 16;
+    -fx-border-radius: 16 16 16 16;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.1), 4, 0, 0, 1);
+    -fx-padding: 12;
+}
+
+.review-card:hover {
+    -fx-background-color: rgba(248, 248, 248, 1.0);
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.15), 6, 0, 0, 2);
+    -fx-scale-x: 1.01;
+    -fx-scale-y: 1.01;
+}
+
+/* ===== 進度條 - superellipse ===== */
+.progress-bar .track {
+    -fx-background-color: rgba(68, 68, 68, 0.3);
+    -fx-background-radius: 10 10 10 10;
+    -fx-border-radius: 10 10 10 10;
+}
+
+.progress-bar .bar {
+    -fx-background-color: #E67649;
+    -fx-background-radius: 10 10 10 10;
+    -fx-border-radius: 10 10 10 10;
+}
+
+/* ===== 工具提示 - superellipse ===== */
+.tooltip {
+    -fx-background-color: rgba(46, 46, 46, 0.95);
+    -fx-text-fill: white;
+    -fx-background-radius: 12 12 12 12;
+    -fx-border-radius: 12 12 12 12;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.3), 6, 0, 0, 2);
+    -fx-padding: 8 12 8 12;
+}
+
 /* 針對所有控制項優化焦點效果 */
 .text-field:focused,
 .text-area:focused,
@@ -135,38 +622,6 @@
     -fx-background-color: derive(#E67649, -10%);
     -fx-scale-x: 0.98;
     -fx-scale-y: 0.98;
-}
-
-/* --- Buttons --- */
-.button, .toggle-button {
-    -fx-background-color: #424242; /* 按鈕背景色 */
-    -fx-text-fill: #FFFFFF; /* 按鈕文字顏色 */
-    /* Increased radius for more rounded buttons */
-    -fx-background-radius: 20;
-    -fx-border-radius: 20;
-    -fx-padding: 8 15 8 15;
-    -fx-cursor: hand;
-    /* Add transitions for smooth hover and press effects */
-    -fx-transition: background-color 0.2s ease-in-out, transform 0.1s ease-in-out;
-    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.2), 2, 0, 0, 1); /* 輕微陰影效果 */
-}
-
-.button:hover, .toggle-button:hover {
-    -fx-background-color: #555555; /* 滑鼠懸停時的背景色 */
-    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.3), 3, 0, 0, 1); /* 懸停時增強陰影 */
-}
-
-/* Modified pressed/selected state */
-.button:pressed, .toggle-button:selected {
-    /* Darker background instead of accent color */
-    -fx-background-color: #303030;
-    /* Keep text white */
-    -fx-text-fill: #FFFFFF;
-    /* Apply slight scale down effect - using JavaFX scale properties */
-    -fx-scale-x: 0.98;
-    -fx-scale-y: 0.98;
-    /* Remove the invalid -fx-transform */
-    /* -fx-transform: scale(0.98); */
 }
 
 /* --- Top Bar Specifics (Example) --- */
@@ -301,16 +756,6 @@
 .chart-bar {
     -fx-bar-fill: -fx-accent; /* Bar Chart 顏色 */
     -fx-background-color: linear-gradient(#ffd700, #ffae00);
-}
-
-/* Specific adjustments for competitor entries if needed */
-#competitor-entry {
-    -fx-border-color: #555555;
-    -fx-border-width: 1; /* Full border */
-    -fx-padding: 8;
-    -fx-background-radius: 8;
-    -fx-border-radius: 8;
-    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.1), 2, 0, 0, 1);
 }
 
 /* Dialog Pane */

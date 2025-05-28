@@ -16,11 +16,18 @@ javafx {
 }
 
 dependencies {
-    // Add JSON library (Needed for Places API response parsing)
+    // JavaFX 依賴項 - 明確添加
+    implementation 'org.openjfx:javafx-controls:21.0.1'
+    implementation 'org.openjfx:javafx-fxml:21.0.1'
+    implementation 'org.openjfx:javafx-swing:21.0.1'
+    implementation 'org.openjfx:javafx-graphics:21.0.1'
+    implementation 'org.openjfx:javafx-base:21.0.1'
+
+    // Add JSON library (統一使用 Maven 版本)
     implementation 'org.json:json:20240303' 
 
     // Add Emoji library for handling emoji codes in reviews
-    implementation 'com.vdurmont:emoji-java:5.1.1' // Or latest version
+    implementation 'com.vdurmont:emoji-java:5.1.1'
     
     // Jackson 套件 (用於 AI 分析功能)
     implementation 'com.fasterxml.jackson.core:jackson-core:2.16.1'
@@ -31,16 +38,16 @@ dependencies {
     testImplementation 'org.junit.jupiter:junit-jupiter-api:5.9.2'
     testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.9.2'
 
-    // 添加 JSON 庫依賴
-    implementation files('libs/json-20230227.jar')
+    // 移除重複的本地 JSON 庫依賴，統一使用 Maven 版本
+    // implementation files('libs/json-20230227.jar')
 }
 
 application {
     // 指定包含 main 方法的主類別
     // 可以選擇執行哪一個主類別
-    //mainClass = 'bigproject.compare'  // 原本的主類別
+    //mainClass = 'bigproject.compare'  // 原本的主類別  
     //mainClass = 'bigproject.AnimationDemo'  // 動畫示範類別
-    mainClass = 'bigproject.AppLauncher'  // 啟動器類別
+    mainClass = 'bigproject.AppLauncher'  // 啟動器類別 - 啟用AI自動初始化
     
     // 定義可執行的應用程式
     applicationName = 'RestaurantAnalyzer'
@@ -119,7 +126,7 @@ task createExecutableJar(type: Jar) {
     
     manifest {
         attributes(
-            'Main-Class': 'bigproject.compare',
+            'Main-Class': 'bigproject.AppLauncher',
             'Class-Path': configurations.runtimeClasspath.files.collect { it.name }.join(' ')
         )
     }
@@ -154,7 +161,7 @@ task createDistribution(dependsOn: ['jar', 'createExecutableJar']) {
         
         println "Distribution created at ${distDir.absolutePath}"
     }
-}
+} 
 
 task runAnalyzer(type: JavaExec) {
     group = 'application'
@@ -166,4 +173,27 @@ task runAnalyzer(type: JavaExec) {
     if (project.hasProperty('args')) {
         args project.property('args').split(' ')
     }
+}
+
+task runAIDemo(type: JavaExec) {
+    description = 'Run AI Progress Dialog Demo'
+    group = 'application'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'bigproject.ai.AIProgressDialogDemo'
+    
+    // JavaFX module settings
+    jvmArgs += [
+        '--add-modules', 'javafx.base,javafx.controls,javafx.fxml,javafx.graphics,javafx.swing',
+        '--add-modules', 'java.net.http,java.prefs',
+        '--add-modules', 'ALL-MODULE-PATH',
+        '--add-opens', 'java.base/java.lang=ALL-UNNAMED',
+        '--add-opens', 'javafx.graphics/javafx.scene=ALL-UNNAMED',
+        '--add-exports', 'javafx.swing/javafx.embed.swing=ALL-UNNAMED'
+    ]
+    
+    // System properties
+    systemProperty 'apple.awt.application.name', 'AI Demo'
+    
+    // Memory settings
+    maxHeapSize = '1g'
 } 
