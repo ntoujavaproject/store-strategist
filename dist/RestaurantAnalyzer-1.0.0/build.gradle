@@ -1,0 +1,273 @@
+plugins {
+    id 'java' // 應用 Java 插件
+    id 'application' // 應用 Application 插件以便執行
+    id 'org.openjfx.javafxplugin' version '0.0.14' // 添加JavaFX插件
+}
+
+repositories {
+    mavenCentral() // 使用 Maven 中央倉庫
+}
+
+// 配置JavaFX
+javafx {
+    version = "21"
+    modules = ['javafx.controls', 'javafx.fxml', 'javafx.swing', 'javafx.graphics', 'javafx.base']
+    // Classifier logic removed - handled by plugin or dependencies
+}
+
+dependencies {
+    // JavaFX 依賴項 - 明確添加
+    implementation 'org.openjfx:javafx-controls:21.0.1'
+    implementation 'org.openjfx:javafx-fxml:21.0.1'
+    implementation 'org.openjfx:javafx-swing:21.0.1'
+    implementation 'org.openjfx:javafx-graphics:21.0.1'
+    implementation 'org.openjfx:javafx-base:21.0.1'
+
+    // Add JSON library (統一使用 Maven 版本)
+    implementation 'org.json:json:20240303' 
+
+    // Add Emoji library for handling emoji codes in reviews
+    implementation 'com.vdurmont:emoji-java:5.1.1'
+    
+    // Jackson 套件 (用於 AI 分析功能)
+    implementation 'com.fasterxml.jackson.core:jackson-core:2.16.1'
+    implementation 'com.fasterxml.jackson.core:jackson-databind:2.16.1'
+    implementation 'com.fasterxml.jackson.core:jackson-annotations:2.16.1'
+
+    // 測試函式庫 (可選，但建議加入)
+    testImplementation 'org.junit.jupiter:junit-jupiter-api:5.9.2'
+    testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.9.2'
+
+    // 移除重複的本地 JSON 庫依賴，統一使用 Maven 版本
+    // implementation files('libs/json-20230227.jar')
+}
+
+application {
+    // 指定包含 main 方法的主類別
+    // 可以選擇執行哪一個主類別
+    //mainClass = 'bigproject.compare'  // 原本的主類別  
+    //mainClass = 'bigproject.AnimationDemo'  // 動畫示範類別
+    mainClass = 'bigproject.AppLauncher'  // 啟動器類別 - 啟用AI自動初始化
+    
+    // 定義可執行的應用程式
+    applicationName = 'RestaurantAnalyzer'
+    
+    // 定義多個應用程式目標
+    executableDir = 'bin'
+    
+    // 添加 JVM 參數
+    applicationDefaultJvmArgs = [
+       // '-Dprism.verbose=true', 
+       // '-Djavafx.verbose=true',
+       // '-Dprism.order=sw' // Keep software rendering if needed, remove otherwise
+       // 添加所有需要的模塊
+       '--add-modules', 'java.net.http,java.prefs,javafx.controls,javafx.fxml,javafx.swing,javafx.graphics,javafx.base',
+       // 添加自動模塊和第三方庫的訪問權限
+       '--add-modules', 'ALL-MODULE-PATH',
+       // 打開模塊邊界
+       '--add-opens', 'java.base/java.lang=ALL-UNNAMED',
+       '--add-opens', 'javafx.graphics/javafx.scene=ALL-UNNAMED',
+       '--add-exports', 'javafx.swing/javafx.embed.swing=ALL-UNNAMED',
+       // 運行時允許使用未命名模塊
+       '-Xmx1g', // 設置最大堆內存為1GB
+       '-Dapple.awt.application.name=Restaurant Analyzer' // 設置macOS應用名稱
+    ]
+}
+
+// 添加應用程式信息
+ext {
+    appName = "Restaurant Analyzer"
+    appVersion = "1.0.0"
+    appVendor = "Restaurant Analyzer Team"
+}
+
+tasks.withType(JavaCompile) {
+    options.encoding = 'UTF-8' // 設定 Java 編譯器使用 UTF-8 編碼
+    // 使用 --release 選項來統一設定 Java 版本並禁用預覽
+    options.compilerArgs = [
+        '--release', '21'
+    ]
+}
+
+tasks.named('test') {
+    useJUnitPlatform() // 設定測試使用 JUnit Platform
+}
+
+// 創建一個任務來更新啟動腳本中的應用程式名稱
+task updateStartScripts {
+    doLast {
+        File windowsScriptFile = new File("${buildDir}/scripts/Restaurant Analyzer.bat")
+        File unixScriptFile = new File("${buildDir}/scripts/Restaurant Analyzer")
+        
+        // 確保目錄存在
+        windowsScriptFile.parentFile.mkdirs()
+        unixScriptFile.parentFile.mkdirs()
+        
+        // 創建啟動腳本
+        if (!windowsScriptFile.exists()) {
+            windowsScriptFile << '@echo off\r\n'
+            windowsScriptFile << 'start "Restaurant Analyzer" /B javaw -jar "%~dp0\\..\\lib\\bigproject.jar"\r\n'
+        }
+        
+        if (!unixScriptFile.exists()) {
+            unixScriptFile << '#!/bin/sh\n'
+            unixScriptFile << 'java -jar "$(dirname "$0")/../lib/bigproject.jar"\n'
+            unixScriptFile.setExecutable(true)
+        }
+    }
+}
+
+// 創建可執行的 JAR 檔案
+task createExecutableJar(type: Jar) {
+    archiveBaseName = project.ext.appName
+    archiveVersion = project.ext.appVersion
+    
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    
+    manifest {
+        attributes(
+            'Main-Class': 'bigproject.AppLauncher',
+            'Class-Path': configurations.runtimeClasspath.files.collect { it.name }.join(' ')
+        )
+    }
+    
+    from {
+        configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) }
+    }
+    
+    with jar
+}
+
+// 創建包含所有依賴的 Fat JAR (用於分發)
+task createFatJar(type: Jar) {
+    archiveBaseName = "${project.ext.appName}-standalone"
+    archiveVersion = project.ext.appVersion
+    archiveClassifier = 'all'
+    
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    
+    manifest {
+        attributes(
+            'Main-Class': 'bigproject.AppLauncher',
+            'Implementation-Title': project.ext.appName,
+            'Implementation-Version': project.ext.appVersion,
+            'Implementation-Vendor': project.ext.appVendor
+        )
+    }
+    
+    // 包含主程式碼
+    from sourceSets.main.output
+    
+    // 包含所有執行時依賴 (包括JavaFX)
+    from {
+        configurations.runtimeClasspath.collect { 
+            it.isDirectory() ? it : zipTree(it).matching {
+                exclude 'META-INF/MANIFEST.MF'
+                exclude 'META-INF/*.SF'
+                exclude 'META-INF/*.DSA'
+                exclude 'META-INF/*.RSA'
+                exclude 'module-info.class'
+            }
+        }
+    }
+    
+    // 確保所有 JavaFX 和其他必要文件被包含
+    from {
+        configurations.runtimeClasspath.findAll { it.name.contains('javafx') }.collect { 
+            zipTree(it)
+        }
+    }
+}
+
+// 創建一個任務來建立分發包
+task createDistribution(dependsOn: ['jar', 'createExecutableJar']) {
+    doLast {
+        // 建立分發目錄
+        def distDir = file("${buildDir}/dist/${project.ext.appName}")
+        distDir.mkdirs()
+        
+        // 複製可執行 JAR 和依賴的 JAR 到分發目錄
+        copy {
+            from tasks.createExecutableJar.archiveFile
+            into distDir
+        }
+        
+        // 創建啟動腳本
+        def winScript = new File(distDir, "${project.ext.appName}.bat")
+        winScript.text = "@echo off\r\njava -jar \"${tasks.createExecutableJar.archiveFileName.get()}\"\r\n"
+        
+        def unixScript = new File(distDir, "${project.ext.appName}.sh")
+        unixScript.text = "#!/bin/sh\njava -jar \"${tasks.createExecutableJar.archiveFileName.get()}\"\n"
+        unixScript.setExecutable(true)
+        
+        println "Distribution created at ${distDir.absolutePath}"
+    }
+} 
+
+task runAnalyzer(type: JavaExec) {
+    group = 'application'
+    description = 'Run FirestoreRestaurantAnalyzer'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'bigproject.ai.FirestoreRestaurantAnalyzer'
+    
+    // 允許從命令行傳遞參數
+    if (project.hasProperty('args')) {
+        args project.property('args').split(' ')
+    }
+}
+
+task runAIDemo(type: JavaExec) {
+    description = 'Run AI Progress Dialog Demo'
+    group = 'application'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'bigproject.ai.AIProgressDialogDemo'
+    
+    // JavaFX module settings
+    jvmArgs += [
+        '--add-modules', 'javafx.base,javafx.controls,javafx.fxml,javafx.graphics,javafx.swing',
+        '--add-modules', 'java.net.http,java.prefs',
+        '--add-modules', 'ALL-MODULE-PATH',
+        '--add-opens', 'java.base/java.lang=ALL-UNNAMED',
+        '--add-opens', 'javafx.graphics/javafx.scene=ALL-UNNAMED',
+        '--add-exports', 'javafx.swing/javafx.embed.swing=ALL-UNNAMED'
+    ]
+    
+    // System properties
+    systemProperty 'apple.awt.application.name', 'AI Demo'
+    
+    // Memory settings
+    maxHeapSize = '1g'
+}
+
+// 創建包含JavaFX runtime的可執行JAR
+task createRuntimeJar(type: Jar) {
+    archiveBaseName = "${project.ext.appName}-runtime"
+    archiveVersion = project.ext.appVersion
+    
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    
+    manifest {
+        attributes(
+            'Main-Class': 'bigproject.AppLauncher',
+            'Implementation-Title': project.ext.appName,
+            'Implementation-Version': project.ext.appVersion,
+            'Implementation-Vendor': project.ext.appVendor,
+            'Class-Path': configurations.runtimeClasspath.files.collect { "libs/" + it.name }.join(' ')
+        )
+    }
+    
+    from sourceSets.main.output
+    
+    doLast {
+        // 複製所有依賴到libs目錄
+        def libsDir = new File(destinationDirectory.get().asFile, "../libs")
+        libsDir.mkdirs()
+        
+        configurations.runtimeClasspath.files.each { file ->
+            copy {
+                from file
+                into libsDir
+            }
+        }
+    }
+} 

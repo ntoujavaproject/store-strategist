@@ -43,16 +43,11 @@ if %errorlevel% equ 0 (
 
 REM 設定 Java 啟動參數
 set "JAVA_OPTS=-Xmx2g -Xms512m"
-set "JAVA_OPTS=%JAVA_OPTS% --add-modules java.net.http,java.prefs,javafx.controls,javafx.fxml,javafx.swing,javafx.graphics,javafx.base"
-set "JAVA_OPTS=%JAVA_OPTS% --add-modules ALL-MODULE-PATH"
-set "JAVA_OPTS=%JAVA_OPTS% --add-opens java.base/java.lang=ALL-UNNAMED"
-set "JAVA_OPTS=%JAVA_OPTS% --add-opens javafx.graphics/javafx.scene=ALL-UNNAMED"
-set "JAVA_OPTS=%JAVA_OPTS% --add-exports javafx.swing/javafx.embed.swing=ALL-UNNAMED"
 
 REM 啟動應用程式
 echo ▶️ 啟動餐廳分析器...
 cd /d "%APP_DIR%"
-java %JAVA_OPTS% -jar "lib\Restaurant Analyzer-1.0.0.jar"
+gradlew.bat run --no-daemon
 
 echo 👋 餐廳分析器已關閉
 pause

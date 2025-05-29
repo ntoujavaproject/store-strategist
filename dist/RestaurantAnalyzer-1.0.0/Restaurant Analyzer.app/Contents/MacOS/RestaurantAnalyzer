@@ -1,0 +1,42 @@
+#!/bin/bash
+
+# 獲取應用程式束的路徑
+APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../Java" && pwd)"
+
+echo "🚀 正在啟動餐廳分析器..."
+echo "📍 應用程式目錄: $APP_DIR"
+
+# 檢查 Java 是否安裝
+if ! command -v java &> /dev/null; then
+    osascript -e 'display dialog "未找到 Java\n\n請安裝 Java 21 或更高版本\n下載地址: https://www.oracle.com/java/technologies/downloads/" with title "Restaurant Analyzer" buttons {"確定"} default button "確定"'
+    exit 1
+fi
+
+# 檢查 Java 版本
+JAVA_VERSION=$(java -version 2>&1 | head -n1 | awk -F '"' '{print $2}' | cut -d'.' -f1)
+if [ "$JAVA_VERSION" -lt 21 ]; then
+    osascript -e "display dialog \"檢測到 Java $JAVA_VERSION，建議使用 Java 21 或更高版本\" with title \"Restaurant Analyzer\" buttons {\"確定\"} default button \"確定\""
+fi
+
+# 檢查 Python 是否安裝 (用於數據收集器)
+if command -v python3 &> /dev/null; then
+    echo "✅ 檢測到 Python 3"
+    # 檢查是否有虛擬環境
+    if [ ! -d "$APP_DIR/.venv" ]; then
+        echo "🐍 創建 Python 虛擬環境..."
+        python3 -m venv "$APP_DIR/.venv"
+        source "$APP_DIR/.venv/bin/activate"
+        if [ -f "$APP_DIR/requirements.txt" ]; then
+            echo "📦 安裝 Python 依賴..."
+            pip install -r "$APP_DIR/requirements.txt"
+        fi
+    else
+        echo "✅ 使用現有 Python 虛擬環境"
+    fi
+else
+    echo "⚠️  警告: 未檢測到 Python 3，數據收集功能可能無法使用"
+fi
+
+# 切換到 Java 目錄並啟動應用程式
+cd "$APP_DIR"
+exec ./gradlew run --no-daemon

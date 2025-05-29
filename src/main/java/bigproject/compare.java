@@ -219,7 +219,7 @@ public class compare extends Application implements UIManager.StateChangeListene
             } finally {
                 // 確保應用程式退出
                 Platform.exit();
-                System.exit(0);
+            System.exit(0);
             }
         });
         // 獲取螢幕尺寸，計算最小視窗大小

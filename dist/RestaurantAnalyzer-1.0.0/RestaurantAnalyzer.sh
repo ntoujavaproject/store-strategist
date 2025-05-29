@@ -44,11 +44,6 @@ fi
 
 # 設定 Java 啟動參數
 JAVA_OPTS="-Xmx2g -Xms512m"
-JAVA_OPTS="$JAVA_OPTS --add-modules java.net.http,java.prefs,javafx.controls,javafx.fxml,javafx.swing,javafx.graphics,javafx.base"
-JAVA_OPTS="$JAVA_OPTS --add-modules ALL-MODULE-PATH"
-JAVA_OPTS="$JAVA_OPTS --add-opens java.base/java.lang=ALL-UNNAMED"
-JAVA_OPTS="$JAVA_OPTS --add-opens javafx.graphics/javafx.scene=ALL-UNNAMED"
-JAVA_OPTS="$JAVA_OPTS --add-exports javafx.swing/javafx.embed.swing=ALL-UNNAMED"
 
 # macOS 特定設定
 if [[ "$OSTYPE" == "darwin"* ]]; then
@@ -59,6 +54,6 @@ fi
 # 啟動應用程式
 echo "▶️  啟動餐廳分析器..."
 cd "$APP_DIR"
-java $JAVA_OPTS -jar "lib/Restaurant Analyzer-1.0.0.jar"
+./gradlew run --no-daemon
 
 echo "👋 餐廳分析器已關閉"

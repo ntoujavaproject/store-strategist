@@ -79,17 +79,17 @@
    ```bash
    git clone https://github.com/ntoujavaproject/restaurant-analyzer.git
    cd restaurant-analyzer
-   ```
+```
 
 2. **安裝 Python 依賴**
    ```bash
    pip install -r requirements.txt
-   ```
+```
 
 3. **建置並執行**
    ```bash
-   ./gradlew run
-   ```
+./gradlew run
+```
 
 4. **打包分發版本**
    ```bash
