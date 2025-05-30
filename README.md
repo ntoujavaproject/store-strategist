@@ -1,164 +1,255 @@
-# 🍽️ 餐廳分析器 - Restaurant Analyzer
+# 🍔 餐廳分析器 - AI 智能餐廳市場分析工具
 
-[![Java](https://img.shields.io/badge/Java-21+-blue.svg)](https://www.oracle.com/java/)
-[![JavaFX](https://img.shields.io/badge/JavaFX-21-orange.svg)](https://openjfx.io/)
-[![Python](https://img.shields.io/badge/Python-3.8+-green.svg)](https://www.python.org/)
-[![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+## 🎉 概述
 
-一個先進的餐廳市場分析應用程式，整合 AI 分析、智能搜尋和視覺化數據展示。專為餐飲業經營者和市場分析師設計。
+**餐廳分析器** 是一款先進的餐廳市場分析應用程式，整合了 AI 智能、即時數據收集和視覺化數據呈現。採用現代化技術架構構建，為餐廳經營者和市場分析師提供零安裝的使用體驗。
 
-## 🚀 核心特色
+## ✨ 核心功能
 
-- **🤖 AI 智能分析** - 整合 Ollama AI 引擎，提供餐廳經營建議
-- **🔍 智能搜尋系統** - 自動名稱匹配、重複檢測、用戶確認機制
-- **📊 實時數據收集** - Google Places API + Firebase 雲端數據庫
-- **💬 AI 聊天助手** - 即時回答餐廳經營相關問題
-- **📱 現代化 UI** - JavaFX 打造的美觀用戶界面
-- **🔧 零安裝配置** - 智能檢測系統環境，自動配置所需組件
+### 🤖 **AI 智能分析**
+- **本地 AI 引擎**：整合 Ollama + Gemma 3:4B 模型進行離線分析
+- **智能聊天助手**：即時餐飲業問題諮詢和建議
+- **評論分析**：自動化顧客評論分析和市場趨勢預測
+- **商業洞察**：基於數據驅動的智能商業建議
 
-## 📦 快速開始
+### 🔍 **智能搜尋系統**
+- **智能名稱匹配**：自動重複檢測並提供用戶確認
+- **Google Places 整合**：即時地理資訊和餐廳數據
+- **Algolia 搜索引擎**：快速精準的餐廳搜尋功能
 
-### 🎯 使用者下載
+### 📊 **即時數據收集**
+- **Firebase 雲端數據庫**：可靠的數據存儲和同步
+- **Google Maps 評論收集**：自動化評論數據擷取
+- **多平台整合**：統一的數據管理介面
 
-查看 [**QUICK_START.md**](QUICK_START.md) 獲取詳細使用指南。
+### 🎨 **現代化用戶介面**
+- **JavaFX 21**：流暢的桌面應用程式體驗
+- **響應式設計**：自適應視窗大小和布局
+- **多分頁系統**：支援同時分析多家餐廳
+- **數據視覺化**：直觀的圖表和分析顯示
 
-**Windows 用戶（推薦）：**
-```bash
-# 下載 dist/ 目錄中的兩個檔案
-# 1. 智能安裝.bat (10KB)
-# 2. 餐廳分析器-智能安裝版.zip (250MB)
+### 🎯 **零安裝體驗**
+- **智能 Java 檢測**：自動 Java 版本檢測
+- **內建運行環境**：需要時回退到內建 Java Runtime
+- **完全自動化**：無需用戶配置
 
-# 執行安裝
-雙擊 智能安裝.bat
-```
+## 📦 下載選項
 
-**Mac 用戶：**
-```bash
-# 下載並安裝 DMG 檔案
-open RestaurantAnalyzer-Working.dmg
-```
+### 🪟 **Windows 用戶**
 
-### 🛠️ 開發者設置
+#### 選項 1：零安裝完整包（推薦）
+- **檔案**：`RestaurantAnalyzer-ZeroInstall-v1.0.0.zip`（261MB）
+- **功能**：完整 Java 21 Runtime + Python 環境 + 應用程式
+- **使用方式**：解壓縮後雙擊 `RestaurantAnalyzer.bat`
+- **優勢**：無需預先安裝任何軟體，適用於任何 Windows 電腦
 
-```bash
-# 克隆專案
-git clone https://github.com/yourusername/restaurant-analyzer.git
-cd restaurant-analyzer
+#### 選項 2：智能安裝腳本
+- **檔案**：`SmartInstaller.bat`（10KB）
+- **功能**：動態環境檢測和智能配置
+- **使用方式**：雙擊執行，自動處理所有安裝步驟
+- **優勢**：檔案小巧，高度自動化
 
-# 使用 Gradle 運行
-./gradlew run
+### 🍎 **Mac 用戶**
+- **檔案**：`RestaurantAnalyzer-Working.dmg`（6.8MB）
+- **功能**：標準 macOS 應用程式安裝包
+- **系統需求**：macOS 10.14+ 且預先安裝 Java 21+
+- **使用方式**：拖拽到 Applications 資料夾並啟動
 
-# 或者使用 IDE (IntelliJ IDEA / Eclipse)
-# 導入為 Gradle 專案
-```
+## 🚀 快速開始
 
-## 🏗️ 技術架構
+### Windows - 零安裝版本：
+1. 下載 `RestaurantAnalyzer-ZeroInstall-v1.0.0.zip`
+2. 解壓縮到任意位置
+3. 雙擊 `RestaurantAnalyzer.bat`
+4. 等待 3-5 分鐘進行首次初始化
+5. 開始分析餐廳！
 
-### 核心技術棧
-- **前端：** JavaFX 21 + CSS 主題
-- **後端：** Java 21 + Gradle 建置系統
-- **AI 引擎：** Ollama (本地 AI 模型)
-- **數據庫：** Firebase Firestore
-- **數據收集：** Python + Google Places API
-- **搜尋服務：** Algolia Search
+### Windows - 智能安裝器：
+1. 下載 `SmartInstaller.bat`
+2. 雙擊執行
+3. 等待自動下載和配置
+4. 應用程式自動啟動
 
-### 系統架構圖
-```
-┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
-│   JavaFX UI     │    │   Data Collector │    │   AI Assistant  │
-│                 │    │   (Python)       │    │   (Ollama)      │
-└─────────────────┘    └──────────────────┘    └─────────────────┘
-         │                       │                       │
-         ▼                       ▼                       ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                    Core Application                            │
-│                     (Java Backend)                             │
-└─────────────────────────────────────────────────────────────────┘
-         │                       │                       │
-         ▼                       ▼                       ▼
-┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
-│   Firebase      │    │   Google Places  │    │   Local Storage │
-│   Database      │    │   API            │    │                 │
-└─────────────────┘    └──────────────────┘    └─────────────────┘
-```
+### Mac：
+1. 下載並開啟 `RestaurantAnalyzer-Working.dmg`
+2. 拖拽應用程式到 Applications 資料夾
+3. 啟動應用程式
 
-### 詳細架構說明
-查看 [**程式架構說明.md**](程式架構說明.md) 了解每個模組的詳細功能。
+## 🛠️ 技術架構
 
-## 📊 主要功能
+### 前端
+- **JavaFX 21**：現代化桌面 UI 框架
+- **響應式設計**：自適應布局和組件
+- **多執行緒**：流暢的 UI 效能
 
-### 🔍 智能搜尋
-- 自動名稱匹配和補全
-- 重複餐廳檢測
-- 智能搜尋建議
-- 多平台數據整合
+### 後端
+- **Java 21**：穩定可靠的核心邏輯
+- **Firebase 整合**：雲端數據庫和存儲
+- **Google Places API**：即時地理數據
+- **Algolia 搜索**：快速餐廳搜索引擎
 
-### 📈 數據分析
-- 即時評分統計
-- 競爭對手比較
-- 消費水平分析
-- 趨勢預測
+### AI 引擎
+- **Ollama**：本地 AI 服務管理
+- **Gemma 3:4B**：先進的語言模型進行分析
+- **本地處理**：注重隱私的 AI，無雲端依賴
 
-### 🤖 AI 助手
-- 餐廳經營建議
-- 市場分析報告
-- 智能問答系統
-- 個性化推薦
+### 數據收集
+- **Python 腳本**：從 Google Maps 自動化數據收集
+- **虛擬環境**：隔離的 Python 依賴項
+- **Firebase 同步**：即時雲端數據同步
 
-### 🗺️ 地圖整合
-- Google Maps 顯示
-- 周邊競爭分析
-- 商圈評估
-- 位置優劣分析
+## 🔧 系統需求
 
-## 🔧 開發指南
+### Windows
+- **作業系統**：Windows 10/11（64位元）
+- **記憶體**：最少 4GB RAM（建議 8GB）
+- **硬碟空間**：至少 5GB 可用空間
+- **網路**：初次設定需要網路連線
 
-### 建置專案
-```bash
-# 編譯專案
-./gradlew build
+### macOS
+- **作業系統**：macOS 10.14 或更新版本
+- **Java**：Java 21+ 必須預先安裝
+- **記憶體**：最少 4GB RAM（建議 8GB）
+- **硬碟空間**：至少 3GB 可用空間
 
-# 運行測試
-./gradlew test
+## 🎯 使用案例
 
-# 創建發布包
-./gradlew createDistribution
-```
+### 餐廳經營者
+- 分析競爭對手的表現
+- 了解顧客評論趨勢
+- 優化定價策略
+- 改善服務品質
 
-### 代碼結構
-```
-src/main/java/bigproject/
-├── compare.java              # 主界面控制器
-├── AppLauncher.java          # 應用程式啟動器
-├── ui/                       # 用戶界面組件
-├── data/                     # 數據管理模組
-├── ai/                       # AI 功能模組
-└── search/                   # 搜尋功能模組
-```
+### 市場分析師
+- 研究餐飲市場趨勢
+- 比較不同區域的餐廳表現
+- 生成詳細的市場報告
+- 預測市場發展方向
 
-## 🤝 貢獻指南
+### 投資者
+- 評估餐廳投資機會
+- 分析品牌表現
+- 了解市場競爭格局
+- 做出明智的投資決策
 
-1. Fork 專案
-2. 創建功能分支 (`git checkout -b feature/AmazingFeature`)
-3. 提交更改 (`git commit -m 'Add some AmazingFeature'`)
-4. 推送到分支 (`git push origin feature/AmazingFeature`)
-5. 開啟 Pull Request
+## 💡 主要特色
 
-## 📄 許可證
+### 智能搜尋
+- **模糊匹配**：即使拼寫略有不同也能找到正確餐廳
+- **重複檢測**：自動識別同一家餐廳的多個條目
+- **即時建議**：輸入時提供智能搜尋建議
 
-本專案採用 MIT 許可證 - 查看 [LICENSE](LICENSE) 檔案了解詳情。
+### AI 分析
+- **情感分析**：自動分析顧客評論的情感傾向
+- **趨勢預測**：基於歷史數據預測未來趨勢
+- **商業建議**：提供可操作的改進建議
 
-## 🌟 Star History
+### 數據視覺化
+- **互動式圖表**：可深入探索的數據圖表
+- **多維度分析**：從不同角度分析餐廳表現
+- **導出功能**：將分析結果導出為報告
 
-[![Star History Chart](https://api.star-history.com/svg?repos=yourusername/restaurant-analyzer&type=Date)](https://star-history.com/#yourusername/restaurant-analyzer&Date)
+## 🔄 工作流程
 
-## 📧 聯絡我們
+### 1. 搜尋餐廳
+1. 在搜尋欄輸入餐廳名稱
+2. 從建議中選擇或繼續輸入
+3. 確認正確的餐廳資訊
+4. 等待數據收集完成
 
-- 作者：[Your Name](https://github.com/yourusername)
-- Email：your.email@example.com
-- 專案連結：[https://github.com/yourusername/restaurant-analyzer](https://github.com/yourusername/restaurant-analyzer)
+### 2. 數據分析
+1. 查看評分分佈和趨勢
+2. 閱讀重要評論摘要
+3. 分析價格和競爭情況
+4. 獲取 AI 生成的洞察
+
+### 3. 比較分析
+1. 開啟新分頁
+2. 搜尋其他餐廳
+3. 在不同分頁間切換比較
+4. 生成比較報告
+
+## 📊 數據來源
+
+- **Google Maps**：評論、評分、照片、基本資訊
+- **Google Places**：地理位置、營業時間、聯絡資訊
+- **Firebase**：歷史數據、趨勢分析
+- **用戶貢獻**：額外的市場洞察和評論
+
+## 🔐 隱私與安全
+
+### 數據保護
+- **本地 AI 處理**：敏感數據不離開您的設備
+- **加密存儲**：所有本地數據均加密存儲
+- **最小化收集**：僅收集必要的業務數據
+
+### 用戶隱私
+- **匿名使用**：無需註冊即可使用核心功能
+- **透明政策**：清楚說明數據使用方式
+- **用戶控制**：用戶可控制數據保留政策
+
+## 🆘 故障排除
+
+### 常見問題和解決方案
+
+#### ❌ **應用程式無法啟動**
+**解決方案**：
+- 確保解壓縮完整
+- 檢查防毒軟體設定
+- 以管理員身分執行
+- 檢查系統需求
+
+#### ❌ **AI 功能無法使用**
+**解決方案**：
+- 檢查網路連線
+- 重新啟動應用程式
+- 清除暫存檔案
+- 更新到最新版本
+
+#### ❌ **Python 相關錯誤**
+**解決方案**：核心功能正常運作，僅數據收集功能可能受限
+
+**問：Python 相關錯誤？**
+答：核心功能正常運作，僅數據收集功能可能受限
+
+## 📞 支援與聯絡
+
+- **GitHub Issues**：回報錯誤和功能請求
+- **文檔**：查看 `QUICK_START.md` 和系統架構文檔
+- **電子郵件**：聯絡開發團隊獲得企業支援
+
+## 📄 授權條款
+
+此專案採用 MIT 授權條款。詳細資訊請參閱 LICENSE 檔案。
+
+## 🚀 未來發展
+
+### 計劃功能
+- **進階分析**：更深入的商業智能分析
+- **行動版本**：iOS 和 Android 應用程式
+- **API 介面**：為第三方整合提供 API
+- **多語言支援**：支援更多語言版本
+
+### 技術改進
+- **雲端部署**：可擴展的雲端基礎設施
+- **即時協作**：多用戶即時分析功能
+- **機器學習**：更先進的預測分析
 
 ---
 
-⭐ 如果這個專案對你有幫助，請給一個 Star！
+**餐廳分析器** - 讓數據驅動您的餐飲業決策 🍽️
+
+## ⭐ Star History
+
+If this project helps you, please consider giving it a star! ⭐
+
+## 🤝 Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+1. Fork the Project
+2. Create your Feature Branch (`git checkout -b feature/AmazingFeature`)
+3. Commit your Changes (`git commit -m 'Add some AmazingFeature'`)
+4. Push to the Branch (`git push origin feature/AmazingFeature`)
+5. Open a Pull Request
 
