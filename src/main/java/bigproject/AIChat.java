@@ -55,6 +55,9 @@ public class AIChat {
     private String currentRestaurantName = "";
     private String currentRestaurantId = "";
     
+    // 新增：專門的ChatRestaurantAdvisor實例，持續管理餐廳數據
+    private bigproject.ai.ChatRestaurantAdvisor advisor;
+    
     // 用於存放 callback 方法的接口
     public interface ChatStateChangeListener {
         void onChatStateChanged(boolean isShowing);
@@ -226,14 +229,52 @@ public class AIChat {
         // 保存聊天訊息容器的引用，以便後續動態更新
         currentChatMessagesContainer = chatMessagesContainer;
         
-        // 將聊天容器放在 ScrollPane 中
+        // 將聊天容器放在 ScrollPane 中 - 改善滾動條顯示
         ScrollPane chatScrollPane = new ScrollPane(chatMessagesContainer);
         chatScrollPane.setFitToWidth(true);
+        chatScrollPane.setFitToHeight(false); // 確保高度能自動調整
         chatScrollPane.setPrefHeight(400);
-        chatScrollPane.setStyle("-fx-background-color: #2C2C2C; -fx-border-color: transparent;");
-        chatScrollPane.setVbarPolicy(ScrollPane.ScrollBarPolicy.AS_NEEDED);
-        chatScrollPane.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
+        chatScrollPane.setMaxHeight(Double.MAX_VALUE); // 允許無限制高度
+        
+        // 改善滾動條樣式 - 讓滾動條更明顯可見
+        chatScrollPane.setStyle(
+            "-fx-background-color: #2C2C2C; " +
+            "-fx-border-color: transparent; " +
+            "-fx-background: #2C2C2C; " +
+            "-fx-control-inner-background: #2C2C2C;"
+        );
+        
+        // 強制顯示滾動條，讓用戶能清楚看到並使用
+        chatScrollPane.setVbarPolicy(ScrollPane.ScrollBarPolicy.ALWAYS);  // 垂直滾動條始終顯示
+        chatScrollPane.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);    // 水平滾動條隱藏
+        
+        // 設置滾動條樣式
+        chatScrollPane.getStylesheets().add("data:text/css," +
+            ".scroll-pane .scroll-bar:vertical { " +
+            "    -fx-background-color: #4A4A4A; " +
+            "    -fx-opacity: 1.0; " +
+            "    -fx-pref-width: 15px; " +
+            "} " +
+            ".scroll-pane .scroll-bar:vertical .track { " +
+            "    -fx-background-color: #3A3A3A; " +
+            "    -fx-opacity: 1.0; " +
+            "} " +
+            ".scroll-pane .scroll-bar:vertical .thumb { " +
+            "    -fx-background-color: #6A6A6A; " +
+            "    -fx-opacity: 1.0; " +
+            "} " +
+            ".scroll-pane .scroll-bar:vertical .thumb:hover { " +
+            "    -fx-background-color: #8A8A8A; " +
+            "}"
+        );
+        
         VBox.setVgrow(chatScrollPane, Priority.ALWAYS);
+        
+        // 改善滾動行為 - 確保內容完整顯示
+        chatScrollPane.viewportBoundsProperty().addListener((obs, oldBounds, newBounds) -> {
+            chatMessagesContainer.setPrefWidth(newBounds.getWidth() - 20); // 留出滾動條空間
+            chatMessagesContainer.setMaxWidth(newBounds.getWidth() - 20);
+        });
         
         // 初始化歡迎訊息
         addWelcomeMessage(chatMessagesContainer, initialContent);
@@ -242,7 +283,37 @@ public class AIChat {
         userInputField = new TextField();
         userInputField.setPromptText("輸入您的問題或想法...");
         userInputField.setPrefHeight(40);
-        userInputField.setStyle("-fx-background-color: #444444; -fx-text-fill: white; -fx-font-size: 14px;");
+        userInputField.setStyle("-fx-background-color: #444444; -fx-text-fill: white; -fx-font-size: 14px; -fx-prompt-text-fill: #AAAAAA;");
+        
+        // 設置較高的字體大小以改善顯示
+        userInputField.setFont(Font.font("System", 16));
+        
+        // 添加中文輸入法支援和字符過濾
+        userInputField.textProperty().addListener((observable, oldValue, newValue) -> {
+            if (newValue != null) {
+                // 過濾掉注音符號，只保留正常的中文字符、英文字符和標點符號
+                String filteredText = newValue.replaceAll("[ㄅ-ㄩˊˇˋ˙]", "");
+                
+                // 如果過濾後的文字與原文字不同，更新文字框內容
+                if (!filteredText.equals(newValue)) {
+                    Platform.runLater(() -> {
+                        int caretPosition = userInputField.getCaretPosition();
+                        userInputField.setText(filteredText);
+                        // 保持游標位置
+                        userInputField.positionCaret(Math.min(caretPosition, filteredText.length()));
+                    });
+                }
+            }
+        });
+        
+        // 當輸入框獲得焦點時，確保正確的輸入法狀態
+        userInputField.focusedProperty().addListener((obs, wasFocused, isNowFocused) -> {
+            if (isNowFocused) {
+                Platform.runLater(() -> {
+                    userInputField.positionCaret(userInputField.getText().length());
+                });
+            }
+        });
         
         // 創建發送按鈕
         Button sendButton = new Button("發送");
@@ -277,14 +348,20 @@ public class AIChat {
                 // 添加"AI思考中"的提示
                 chatMessagesContainer.getChildren().add(createSystemMessageBox("AI助手: 思考中..."));
                 
-                // 滾動到底部
-                chatScrollPane.setVvalue(1.0);
+                // 滾動到底部 - 使用更好的滾動方法
+                scrollToBottom(chatScrollPane);
                 
                 // 使用CompletableFuture在後台處理AI響應
                 CompletableFuture.runAsync(() -> {
                     try {
+                        System.out.println("🤖 開始調用AI生成回應...");
+                        
                         // 獲取AI響應 (實際調用Ollama API)
                         String aiResponse = callOllamaAPI(userMessage, contentType, initialContent);
+                        
+                        System.out.println("✅ AI回應生成完成");
+                        System.out.println("📏 AI回應總長度: " + aiResponse.length() + " 字元");
+                        System.out.println("📝 AI回應完整內容: " + aiResponse);
                         
                         // 記錄對話到JSON檔案
                         if (currentSessionId != null) {
@@ -293,21 +370,38 @@ public class AIChat {
                         
                         // 更新UI (必須在JavaFX線程中進行)
                         Platform.runLater(() -> {
+                            System.out.println("🖥️ 開始更新UI顯示AI回應");
+                            
                             // 移除"思考中"的提示
                             chatMessagesContainer.getChildren().remove(chatMessagesContainer.getChildren().size() - 1);
-                            // 添加AI的響應
-                            chatMessagesContainer.getChildren().add(createAIMessageBox(aiResponse));
                             
-                            // 滾動到底部
-                            chatScrollPane.setVvalue(1.0);
+                            System.out.println("📦 創建AI訊息框，內容長度: " + aiResponse.length());
+                            
+                            // 添加AI的響應 - 確保完整內容都顯示
+                            HBox aiMessageBox = createAIMessageBox(aiResponse);
+                            chatMessagesContainer.getChildren().add(aiMessageBox);
+                            
+                            System.out.println("✅ AI訊息框已添加到容器");
+                            
+                            // 確保容器佈局更新
+                            chatMessagesContainer.applyCss();
+                            chatMessagesContainer.layout();
+                            
+                            // 滾動到底部以顯示新回應
+                            scrollToBottom(chatScrollPane);
+                            
+                            System.out.println("🎉 AI回應UI更新完成");
                         });
                     } catch (Exception e) {
+                        System.err.println("❌ AI回應處理異常: " + e.getMessage());
+                        e.printStackTrace();
                         Platform.runLater(() -> {
                             // 處理錯誤情況
                             chatMessagesContainer.getChildren().remove(chatMessagesContainer.getChildren().size() - 1);
-                            chatMessagesContainer.getChildren().add(createSystemMessageBox("AI助手: 抱歉，我遇到了一些問題，無法回應您的問題。\n錯誤詳情：" + e.getMessage()));
+                            String errorMessage = "AI助手: 抱歉，我遇到了一些問題，無法回應您的問題。\n錯誤詳情：" + e.getMessage();
+                            chatMessagesContainer.getChildren().add(createSystemMessageBox(errorMessage));
+                            scrollToBottom(chatScrollPane);
                         });
-                        e.printStackTrace();
                     }
                 });
             }
@@ -355,10 +449,15 @@ public class AIChat {
             System.out.println("🤖 使用 ChatRestaurantAdvisor 生成回應");
             
             // 使用 ChatRestaurantAdvisor 來生成回應
-            bigproject.ai.ChatRestaurantAdvisor advisor = new bigproject.ai.ChatRestaurantAdvisor();
+            advisor = new bigproject.ai.ChatRestaurantAdvisor();
+            
+            // 使用最新的初始內容（包含分析完成後的詳細數據）
+            String contentToUse = currentInitialContent != null ? currentInitialContent : initialContent;
+            System.out.println("📊 傳遞給AI的內容長度: " + contentToUse.length() + " 字元");
+            System.out.println("📝 內容預覽: " + contentToUse.substring(0, Math.min(100, contentToUse.length())) + "...");
             
             // 設置餐廳特色資訊
-            advisor.setRestaurantFeatures(initialContent);
+            advisor.setRestaurantFeatures(contentToUse);
             
             // 調用 AI 生成回應
             String response = advisor.chatWithAI(userMessage);
@@ -382,7 +481,7 @@ public class AIChat {
     }
 
     /**
-     * 創建用戶訊息框（顯示在右側）
+     * 創建用戶訊息框（顯示在右側）- 改善長文字寬度控制
      */
     private HBox createUserMessageBox(String message) {
         HBox messageBox = new HBox();
@@ -400,12 +499,46 @@ public class AIChat {
                              "-fx-wrap-text: true;");
         messageLabel.setWrapText(true);
         
+        // 改善：動態調整最大寬度 - 支援更長的用戶訊息
+        int contentLength = message.length();
+        System.out.println("🔍 用戶訊息內容長度: " + contentLength + " 字元");
+        
+        // 為長用戶訊息提供足夠的顯示空間（與AI回覆類似的分級）
+        if (contentLength > 1500) {
+            messageLabel.setMaxWidth(850);  // 超長用戶訊息
+            messageLabel.setPrefWidth(850);
+            System.out.println("✅ 設置超長用戶訊息寬度: 850px");
+        } else if (contentLength > 800) {
+            messageLabel.setMaxWidth(750);  // 長用戶訊息
+            messageLabel.setPrefWidth(750);
+            System.out.println("✅ 設置長用戶訊息寬度: 750px");
+        } else if (contentLength > 300) {
+            messageLabel.setMaxWidth(650);  // 中等用戶訊息
+            messageLabel.setPrefWidth(650);
+            System.out.println("✅ 設置中等用戶訊息寬度: 650px");
+        } else if (contentLength > 100) {
+            messageLabel.setMaxWidth(500);  // 一般用戶訊息
+            messageLabel.setPrefWidth(500);
+            System.out.println("✅ 設置一般用戶訊息寬度: 500px");
+        } else {
+            messageLabel.setMaxWidth(400);  // 短用戶訊息
+            messageLabel.setPrefWidth(400);
+            System.out.println("✅ 設置短用戶訊息寬度: 400px");
+        }
+        
+        // 確保標籤能自動調整高度以容納所有文字
+        messageLabel.setMinHeight(Region.USE_PREF_SIZE);
+        messageLabel.setPrefHeight(Region.USE_COMPUTED_SIZE);
+        messageLabel.setMaxHeight(Region.USE_COMPUTED_SIZE);
+        
         messageBox.getChildren().add(messageLabel);
+        
+        System.out.println("✅ 用戶訊息框創建完成，內容長度: " + contentLength);
         return messageBox;
     }
     
     /**
-     * 創建AI訊息框（顯示在左側）
+     * 創建AI訊息框（顯示在左側）- 改善完整內容顯示
      */
     private HBox createAIMessageBox(String message) {
         HBox messageBox = new HBox();
@@ -423,23 +556,66 @@ public class AIChat {
         avatarLabel.setMaxSize(50, 50);
         avatarLabel.setAlignment(Pos.CENTER);
         
-        // 訊息氣泡
+        // 訊息氣泡 - 改善長文字顯示
         Label messageLabel = new Label(message);
-        messageLabel.setPadding(new Insets(15, 20, 15, 20));
+        messageLabel.setPadding(new Insets(20, 25, 20, 25)); // 增加內邊距
         messageLabel.setStyle("-fx-background-color: #444444; " +
                              "-fx-text-fill: white; " +
                              "-fx-background-radius: 18; " +
                              "-fx-font-size: 16px; " +
-                             "-fx-wrap-text: true;");
+                             "-fx-wrap-text: true; " +
+                             "-fx-text-alignment: left; " +        // 文字左對齊
+                             "-fx-line-spacing: 3px;");            // 增加行間距
+        
         messageLabel.setWrapText(true);
+        
+        // 確保能顯示完整內容 - 根據內容長度設置合適的寬度
+        int contentLength = message.length();
+        System.out.println("🔍 AI回應內容長度: " + contentLength + " 字元");
+        System.out.println("📝 AI回應前100字元: " + message.substring(0, Math.min(100, contentLength)));
+        
+        // 為長回應提供足夠的顯示空間
+        if (contentLength > 2000) {
+            messageLabel.setMaxWidth(900);  // 超長回應用最大寬度
+            messageLabel.setPrefWidth(900);
+            System.out.println("✅ 設置超長回應寬度: 900px");
+        } else if (contentLength > 1000) {
+            messageLabel.setMaxWidth(850);  // 長回應
+            messageLabel.setPrefWidth(850);
+            System.out.println("✅ 設置長回應寬度: 850px");
+        } else if (contentLength > 500) {
+            messageLabel.setMaxWidth(750);  // 中等回應
+            messageLabel.setPrefWidth(750);
+            System.out.println("✅ 設置中等回應寬度: 750px");
+        } else {
+            messageLabel.setMaxWidth(650);  // 短回應
+            messageLabel.setPrefWidth(650);
+            System.out.println("✅ 設置短回應寬度: 650px");
+        }
+        
+        // 確保標籤能自動調整高度以容納所有文字
+        messageLabel.setMinHeight(Region.USE_PREF_SIZE);
+        messageLabel.setPrefHeight(Region.USE_COMPUTED_SIZE);
+        messageLabel.setMaxHeight(Region.USE_COMPUTED_SIZE);
+        
+        // 確保文字不被截斷
+        messageLabel.setMaxWidth(Double.MAX_VALUE);  // 允許無限寬度
+        messageLabel.setWrapText(true);               // 強制換行
         
         messageBox.getChildren().addAll(avatarLabel, messageLabel);
         messageBox.setSpacing(10);
+        
+        // 設置 messageBox 也能自動調整
+        messageBox.setMinHeight(Region.USE_PREF_SIZE);
+        messageBox.setPrefHeight(Region.USE_COMPUTED_SIZE);
+        messageBox.setMaxHeight(Region.USE_COMPUTED_SIZE);
+        
+        System.out.println("✅ AI訊息框創建完成，內容長度: " + contentLength);
         return messageBox;
     }
     
     /**
-     * 創建系統訊息框（置中顯示）
+     * 創建系統訊息框（置中顯示）- 改善長文字顯示
      */
     private HBox createSystemMessageBox(String message) {
         HBox messageBox = new HBox();
@@ -447,15 +623,38 @@ public class AIChat {
         messageBox.setPadding(new Insets(10, 20, 10, 20));
         
         Label messageLabel = new Label(message);
-        messageLabel.setPadding(new Insets(15, 20, 15, 20));
+        messageLabel.setPadding(new Insets(20, 25, 20, 25)); // 增加內邊距
         messageLabel.setStyle("-fx-background-color: #333333; " +
                              "-fx-text-fill: #CCCCCC; " +
                              "-fx-background-radius: 15; " +
                              "-fx-font-size: 15px; " +
                              "-fx-font-style: italic; " +
-                             "-fx-wrap-text: true;");
+                             "-fx-wrap-text: true; " +
+                             "-fx-text-alignment: left; " +  // 文字左對齊，更易閱讀
+                             "-fx-line-spacing: 2px;");      // 增加行間距
+        
         messageLabel.setWrapText(true);
-        messageLabel.setMaxWidth(600);
+        
+        // 改善文字顯示：為長內容提供更大的顯示空間
+        int contentLength = message.length();
+        if (contentLength > 2000) {
+            messageLabel.setMaxWidth(850);  // 超長內容用最大寬度
+            messageLabel.setPrefWidth(850);
+        } else if (contentLength > 1000) {
+            messageLabel.setMaxWidth(800);  // 長內容
+            messageLabel.setPrefWidth(800);
+        } else if (contentLength > 500) {
+            messageLabel.setMaxWidth(700);  // 中等內容
+            messageLabel.setPrefWidth(700);
+        } else {
+            messageLabel.setMaxWidth(600);  // 短內容
+            messageLabel.setPrefWidth(600);
+        }
+        
+        // 確保標籤能自動調整高度以容納所有文字
+        messageLabel.setMinHeight(Region.USE_PREF_SIZE);
+        messageLabel.setPrefHeight(Region.USE_COMPUTED_SIZE);
+        messageLabel.setMaxHeight(Region.USE_COMPUTED_SIZE);
         
         messageBox.getChildren().add(messageLabel);
         return messageBox;
@@ -466,9 +665,30 @@ public class AIChat {
      */
     private void addWelcomeMessage(VBox container, String initialContent) {
         StringBuilder welcomeText = new StringBuilder();
-        welcomeText.append("🔄 正在載入餐廳特色資料...\n\n");
-        welcomeText.append("📊 分析結果：\n").append(initialContent).append("\n\n");
-        welcomeText.append("💬 您可以開始提問了！");
+        welcomeText.append("💬 歡迎使用 AI 餐廳經營顧問助手！\n\n");
+        welcomeText.append("📋 我已經載入了以下餐廳分析資料：\n\n");
+        
+        // 改善：顯示完整的分析內容，不再截斷
+        if (initialContent != null && !initialContent.trim().isEmpty()) {
+            // 如果內容很長，分段顯示以提高可讀性
+            if (initialContent.length() > 500) {
+                welcomeText.append("📊 詳細分析結果：\n");
+                welcomeText.append(initialContent);
+            } else {
+                welcomeText.append(initialContent);
+            }
+        } else {
+            welcomeText.append("⏳ 正在載入分析資料，請稍候...");
+        }
+        
+        welcomeText.append("\n\n💡 您可以詢問以下類型的問題：");
+        welcomeText.append("\n• 如何提升客戶滿意度？");
+        welcomeText.append("\n• 建議增加什麼新的服務項目？");
+        welcomeText.append("\n• 如何改善營運效率？");
+        welcomeText.append("\n• 適合什麼樣的促銷活動？");
+        welcomeText.append("\n• 分析我的優缺點");
+        welcomeText.append("\n• 給我經營建議");
+        welcomeText.append("\n\n🚀 現在就開始提問吧！");
         
         container.getChildren().add(createSystemMessageBox(welcomeText.toString()));
     }
@@ -484,19 +704,103 @@ public class AIChat {
             // 更新保存的初始內容
             currentInitialContent = newContent;
             
+            // 同時更新ChatRestaurantAdvisor的餐廳特色資訊
+            if (advisor != null) {
+                advisor.setRestaurantFeatures(newContent);
+                System.out.println("✅ 已同步更新ChatRestaurantAdvisor的餐廳特色資訊");
+            }
+            
             Platform.runLater(() -> {
                 // 移除舊的歡迎訊息（第一個子元素）
                 if (!currentChatMessagesContainer.getChildren().isEmpty()) {
                     currentChatMessagesContainer.getChildren().remove(0);
                 }
                 
-                // 添加新的歡迎訊息到頂部
-                currentChatMessagesContainer.getChildren().add(0, createSystemMessageBox(
-                    "🎉 分析完成！\n\n📊 最新分析結果：\n" + newContent + "\n\n💬 您可以基於這些分析結果提問！"
-                ));
+                // 創建新的完整歡迎訊息
+                StringBuilder updatedWelcomeText = new StringBuilder();
+                updatedWelcomeText.append("🎉 分析完成！\n\n");
+                updatedWelcomeText.append("📊 最新完整分析結果：\n\n");
                 
-                System.out.println("✅ AI 聊天初始內容已更新");
+                // 顯示完整的分析結果，不再截斷
+                if (newContent != null && !newContent.trim().isEmpty()) {
+                    updatedWelcomeText.append(newContent);
+                } else {
+                    updatedWelcomeText.append("⚠️ 分析結果為空，請重新分析");
+                }
+                
+                updatedWelcomeText.append("\n\n💬 您可以基於這些詳細分析結果提問！");
+                updatedWelcomeText.append("\n💡 例如：");
+                updatedWelcomeText.append("\n• 分析我的主要優缺點");
+                updatedWelcomeText.append("\n• 如何改善客戶體驗？");
+                updatedWelcomeText.append("\n• 建議具體的經營策略");
+                
+                // 添加新的歡迎訊息到頂部
+                currentChatMessagesContainer.getChildren().add(0, createSystemMessageBox(updatedWelcomeText.toString()));
+                
+                System.out.println("✅ AI 聊天初始內容已更新，內容長度: " + newContent.length() + " 字元");
             });
         }
+    }
+
+    /**
+     * 滾動到底部 - 改善滾動體驗
+     */
+    private void scrollToBottom(ScrollPane scrollPane) {
+        Platform.runLater(() -> {
+            // 確保佈局更新
+            scrollPane.layout();
+            scrollPane.applyCss();
+            
+            // 滾動到底部
+            scrollPane.setVvalue(1.0);
+            
+            // 添加滾動提示（如果內容很長）
+            if (scrollPane.getContent() instanceof VBox) {
+                VBox content = (VBox) scrollPane.getContent();
+                if (content.getChildren().size() > 3) {
+                    // 顯示滾動提示
+                    showScrollHint();
+                }
+            }
+        });
+    }
+    
+    /**
+     * 顯示滾動提示
+     */
+    private void showScrollHint() {
+        Platform.runLater(() -> {
+            if (currentChatMessagesContainer != null && currentChatMessagesContainer.getChildren().size() == 2) {
+                // 只在開始聊天時顯示一次提示
+                HBox hintBox = new HBox();
+                hintBox.setAlignment(Pos.CENTER);
+                hintBox.setPadding(new Insets(5, 20, 5, 20));
+                
+                Label hintLabel = new Label("💡 提示：您可以使用滾動條查看上面的完整內容");
+                hintLabel.setStyle("-fx-background-color: #444444; " +
+                                 "-fx-text-fill: #AAAAAA; " +
+                                 "-fx-background-radius: 10; " +
+                                 "-fx-font-size: 12px; " +
+                                 "-fx-padding: 8 15 8 15;");
+                
+                hintBox.getChildren().add(hintLabel);
+                currentChatMessagesContainer.getChildren().add(1, hintBox); // 在歡迎訊息後插入
+                
+                // 5秒後自動移除提示
+                new Thread(() -> {
+                    try {
+                        Thread.sleep(5000);
+                        Platform.runLater(() -> {
+                            if (currentChatMessagesContainer != null && 
+                                currentChatMessagesContainer.getChildren().contains(hintBox)) {
+                                currentChatMessagesContainer.getChildren().remove(hintBox);
+                            }
+                        });
+                    } catch (InterruptedException e) {
+                        // 忽略中斷
+                    }
+                }).start();
+            }
+        });
     }
 } 

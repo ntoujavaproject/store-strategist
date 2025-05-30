@@ -30,32 +30,87 @@ public class ChatRestaurantAdvisor {
      */
     public String chatWithAI(String question) {
         try {
+            // 記錄用戶輸入
+            System.out.println("🗣️ 用戶問題: " + question);
             conversationHistory.add("營業者：" + question);
             
-            // 組建 prompt
+            // 改進的prompt構建，確保AI能夠回應用戶的具體問題
             StringBuilder prompt = new StringBuilder();
-            prompt.append("你是餐飲經營顧問，根據以下餐廳特色與對話，給出具體經營建議。\n");
-            prompt.append("餐廳特色：\n").append(restaurantFeatures).append("\n");
-            prompt.append("對話記錄：\n");
-            for (String turn : conversationHistory) {
-                prompt.append(turn).append("\n");
+            
+            // 系統角色定義
+            prompt.append("你是一位專業的餐飲經營顧問AI助手。請根據以下資訊回答問題：\n\n");
+            
+            // 餐廳特色資訊（如果有的話）
+            if (restaurantFeatures != null && !restaurantFeatures.trim().isEmpty()) {
+                prompt.append("餐廳特色分析結果：\n");
+                prompt.append(restaurantFeatures).append("\n\n");
             }
+            
+            // 添加最近的對話歷史（只保留最近5輪對話以避免prompt過長）
+            if (conversationHistory.size() > 10) {
+                prompt.append("最近的對話：\n");
+                List<String> recentHistory = conversationHistory.subList(
+                    Math.max(0, conversationHistory.size() - 10), 
+                    conversationHistory.size()
+                );
+                for (String turn : recentHistory) {
+                    prompt.append(turn).append("\n");
+                }
+            } else {
+                prompt.append("對話記錄：\n");
+                for (String turn : conversationHistory) {
+                    prompt.append(turn).append("\n");
+                }
+            }
+            
+            // 明確的指示
+            prompt.append("\n請根據用戶的問題提供具體、實用的建議。");
+            prompt.append("如果問題與餐廳經營相關，請結合餐廳特色資訊來回答。");
+            prompt.append("請直接回答問題，不要重複餐廳特色資訊。\n\n");
             prompt.append("AI：");
+            
+            System.out.println("🤖 發送prompt到Ollama: " + prompt.toString().substring(0, Math.min(200, prompt.length())) + "...");
             
             String reply = callOllama(prompt.toString());
             
-            // 若回英文，再翻譯
+            // 清理回應，移除可能的重複內容
+            reply = cleanResponse(reply);
+            
+            // 若回應是英文，再翻譯成繁體中文
             if (!looksChinese(reply)) {
-                reply = callOllama("請把下列內容完整翻成「繁體中文」，不要加任何註解：\n" + reply);
+                System.out.println("🔄 偵測到英文回應，正在翻譯...");
+                reply = callOllama("請把下列內容完整翻譯成「繁體中文」，保持原意但使用自然的中文表達：\n" + reply);
             }
             
             conversationHistory.add("AI：" + reply.trim());
+            System.out.println("✅ AI回應: " + reply.trim());
             return reply.trim();
             
         } catch (Exception e) {
             System.err.println("❌ AI 對話失敗: " + e.getMessage());
+            e.printStackTrace();
             return "抱歉，AI 服務暫時無法使用，請稍後再試。\n錯誤詳情：" + e.getMessage();
         }
+    }
+    
+    /**
+     * 清理AI回應，移除重複或無關的內容
+     */
+    private String cleanResponse(String response) {
+        if (response == null || response.trim().isEmpty()) {
+            return "抱歉，我無法理解您的問題，請換個方式提問。";
+        }
+        
+        // 移除可能的前綴標記
+        response = response.replaceAll("^AI：", "").trim();
+        response = response.replaceAll("^AI:", "").trim();
+        
+        // 如果回應過短，提示用戶
+        if (response.length() < 10) {
+            return "我需要更多資訊才能給您詳細的建議，請提供更具體的問題。";
+        }
+        
+        return response;
     }
     
     /**
@@ -73,7 +128,10 @@ public class ChatRestaurantAdvisor {
         }
         String features = args[0];
         Scanner scanner = new Scanner(System.in);
-        List<String> history = new ArrayList<>();
+        
+        // 創建ChatRestaurantAdvisor實例
+        ChatRestaurantAdvisor advisor = new ChatRestaurantAdvisor();
+        advisor.setRestaurantFeatures(features);
 
         System.out.println("── 已載入餐廳特色 ──");
         System.out.println(features);
@@ -85,26 +143,8 @@ public class ChatRestaurantAdvisor {
             if (question.isEmpty()) continue;
             if ("exit".equalsIgnoreCase(question)) break;
 
-            history.add("營業者：" + question);
-
-            // 組 prompt：system + features + 歷史對話 + 本次提問
-            StringBuilder prompt = new StringBuilder();
-            prompt.append("你是餐飲經營顧問，根據以下餐廳特色與對話，給出具體經營建議。\n");
-            prompt.append("餐廳特色：\n").append(features).append("\n");
-            prompt.append("對話記錄：\n");
-            for (String turn : history) {
-                prompt.append(turn).append("\n");
-            }
-            prompt.append("AI：");
-
-            String reply = callOllama(prompt.toString());
-            // 若回英文，再翻譯
-            if (!looksChinese(reply)) {
-                reply = callOllama("請把下列內容完整翻成「繁體中文」，不要加任何註解：\n" + reply);
-            }
-
-            System.out.println("AI: " + reply.trim());
-            history.add("AI：" + reply.trim());
+            String reply = advisor.chatWithAI(question);
+            System.out.println("AI: " + reply);
         }
 
         System.out.println("結束對話。");
