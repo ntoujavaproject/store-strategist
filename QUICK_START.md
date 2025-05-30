@@ -1,45 +1,68 @@
-# 🚀 快速開始指南
+# 🍔 餐廳分析器 - 快速開始指南
 
-## 📥 立即下載
+## 📦 只需要兩個檔案
 
-### 💻 用戶下載
-前往 `dist/` 資料夾，選擇你的系統：
+1️⃣ **智能安裝.bat** (10KB) - 智能安裝腳本  
+2️⃣ **餐廳分析器-智能安裝版.zip** (250MB) - 完整應用程式包
 
-| 系統 | 檔案 | 說明 |
-|------|------|------|
-| **🌐 全平台** | `RestaurantAnalyzer-1.0.0-crossplatform.zip` | Windows、Mac、Linux 通用 |
-| **🍎 Mac 專用** | `RestaurantAnalyzer-1.0.0-mac.dmg` | 原生 Mac 安裝包 |
+## 🚀 使用方法（超簡單）
 
-### ⚡ 一鍵啟動
+### Windows 用戶：
+1. 下載 `dist` 目錄中的兩個檔案
+2. 雙擊 `智能安裝.bat`
+3. 等待 3-5 分鐘自動配置
+4. 程式會自動啟動
 
-#### Windows 用戶
-1. 下載 ZIP → 解壓縮 → 雙擊 `RestaurantAnalyzer.bat`
+### Mac 用戶：
+1. 下載 `RestaurantAnalyzer-Working.dmg`
+2. 雙擊安裝並拖拽到應用程式資料夾
+3. 啟動餐廳分析器
 
-#### Mac 用戶（DMG）
-1. 下載 DMG → 雙擊開啟 → 拖拽到 Applications
+## ✅ 智能特色
 
-#### Mac/Linux 用戶（ZIP）
-1. 下載 ZIP → 解壓縮 → 終端執行 `./RestaurantAnalyzer.sh`
+- **🔍 自動檢測**：檢查系統 Java 版本
+- **📦 智能選擇**：
+  - 有 Java 21+ → 使用系統 Java（節省空間）
+  - 無 Java → 自動下載配置內建 Java
+- **🎛️ 完全自動化**：無需用戶選擇或配置
 
-## ⚠️ 需要安裝
-- **Java 21+** - [下載地址](https://www.oracle.com/java/technologies/downloads/)
+## 📊 系統需求
 
-## 🆘 遇到問題？
-- 查看 [DISTRIBUTION_GUIDE.md](DISTRIBUTION_GUIDE.md) - 詳細安裝指南
-- 查看 [README.md](README.md) - 完整功能說明
+### Windows
+- Windows 10/11
+- 至少 4GB RAM
+- 500MB 硬碟空間
+- 網路連線（首次啟動）
 
-## 👩‍💻 開發者
-```bash
-# 克隆專案
-git clone https://github.com/yourusername/restaurant-analyzer.git
+### Mac
+- macOS 10.14+
+- 至少 4GB RAM
+- 200MB 硬碟空間
 
-# 執行
-./gradlew run
+## 🔧 常見問題
 
-# 打包
-./package.sh  # Mac/Linux
-package.bat   # Windows
-```
+**Q: 程式卡住了？**  
+A: 第一次啟動需要下載 AI 模型，請等待 5 分鐘
 
----
-🍽️ **餐廳分析器** - 讓餐廳經營更智能！ 
+**Q: 需要安裝其他軟體嗎？**  
+A: 完全不需要！這是零安裝版本
+
+**Q: 程式閃退？**  
+A: 檢查網路連線，暫時關閉防毒軟體
+
+## 🎯 功能介紹
+
+- 🍽️ 餐廳分析和評分
+- 🤖 AI 智能建議
+- 📊 評論數據分析
+- 🗺️ Google Maps 整合
+- 📈 競爭對手比較
+- 🔍 多平台搜尋
+
+## 💡 提示
+
+- 建議使用 `智能安裝.bat`，讓程式自動判斷和處理
+- 首次啟動需要網路下載 AI 模型
+- 之後可離線使用核心功能
+
+🎉 享受智能化的餐廳分析體驗！ 

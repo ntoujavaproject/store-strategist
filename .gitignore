@@ -56,3 +56,4 @@ chat_history/*.json
 release-notes.md
 
 # JSON data (如果太大且屬於測試數據，可考慮排除)
+dist/餐廳分析器-智能安裝版.zip

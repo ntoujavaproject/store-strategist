@@ -270,4 +270,131 @@ task createRuntimeJar(type: Jar) {
             }
         }
     }
+}
+
+// 創建自包含的 Java Runtime 包 (使用 jlink)
+task createCustomJRE(type: Exec) {
+    description = 'Create a custom JRE using jlink'
+    group = 'distribution'
+    
+    // 確保先創建 Fat JAR
+    dependsOn createFatJar
+    
+    doFirst {
+        // 創建輸出目錄
+        def jreDir = file("${buildDir}/jre")
+        jreDir.mkdirs()
+    }
+    
+    // 使用 jlink 創建精簡的 JRE
+    commandLine 'jlink',
+        '--add-modules', 'java.base,java.desktop,java.net.http,java.prefs,javafx.controls,javafx.fxml,javafx.swing,javafx.graphics,javafx.base',
+        '--output', "${buildDir}/jre",
+        '--strip-debug',
+        '--no-man-pages',
+        '--no-header-files',
+        '--compress=2'
+}
+
+// 創建 Windows 可執行安裝包
+task createWindowsInstaller(type: Exec) {
+    description = 'Create Windows installer using jpackage'
+    group = 'distribution'
+    
+    dependsOn createFatJar, createCustomJRE
+    
+    onlyIf { org.gradle.internal.os.OperatingSystem.current().isWindows() }
+    
+    commandLine 'jpackage',
+        '--type', 'msi',
+        '--input', 'build/libs',
+        '--dest', 'build/installers',
+        '--name', 'Restaurant Analyzer',
+        '--main-jar', "Restaurant Analyzer-standalone-${project.ext.appVersion}-all.jar",
+        '--main-class', 'bigproject.AppLauncher',
+        '--runtime-image', "${buildDir}/jre",
+        '--app-version', project.ext.appVersion,
+        '--vendor', project.ext.appVendor,
+        '--description', 'AI-powered restaurant analysis tool',
+        '--copyright', 'Copyright © 2024',
+        '--win-dir-chooser',
+        '--win-menu',
+        '--win-shortcut'
+}
+
+// 創建 macOS 可執行安裝包
+task createMacInstaller(type: Exec) {
+    description = 'Create macOS installer using jpackage'
+    group = 'distribution'
+    
+    dependsOn createFatJar, createCustomJRE
+    
+    onlyIf { org.gradle.internal.os.OperatingSystem.current().isMacOsX() }
+    
+    commandLine 'jpackage',
+        '--type', 'dmg',
+        '--input', 'build/libs',
+        '--dest', 'build/installers',
+        '--name', 'Restaurant Analyzer',
+        '--main-jar', "Restaurant Analyzer-standalone-${project.ext.appVersion}-all.jar",
+        '--main-class', 'bigproject.AppLauncher',
+        '--runtime-image', "${buildDir}/jre",
+        '--app-version', project.ext.appVersion,
+        '--vendor', project.ext.appVendor,
+        '--description', 'AI-powered restaurant analysis tool',
+        '--copyright', 'Copyright © 2024',
+        '--mac-package-identifier', 'com.restaurantanalyzer.app'
+}
+
+// 創建 Linux 可執行安裝包
+task createLinuxInstaller(type: Exec) {
+    description = 'Create Linux installer using jpackage'
+    group = 'distribution'
+    
+    dependsOn createFatJar, createCustomJRE
+    
+    onlyIf { org.gradle.internal.os.OperatingSystem.current().isLinux() }
+    
+    commandLine 'jpackage',
+        '--type', 'deb',
+        '--input', 'build/libs',
+        '--dest', 'build/installers',
+        '--name', 'restaurant-analyzer',
+        '--main-jar', "Restaurant Analyzer-standalone-${project.ext.appVersion}-all.jar",
+        '--main-class', 'bigproject.AppLauncher',
+        '--runtime-image', "${buildDir}/jre",
+        '--app-version', project.ext.appVersion,
+        '--vendor', project.ext.appVendor,
+        '--description', 'AI-powered restaurant analysis tool',
+        '--copyright', 'Copyright © 2024',
+        '--linux-package-name', 'restaurant-analyzer',
+        '--linux-deb-maintainer', 'Restaurant Analyzer Team'
+}
+
+// 統一的原生安裝包創建任務
+task createNativeInstaller {
+    description = 'Create native installer for current platform'
+    group = 'distribution'
+    
+    dependsOn createFatJar
+    
+    if (org.gradle.internal.os.OperatingSystem.current().isWindows()) {
+        dependsOn createWindowsInstaller
+    } else if (org.gradle.internal.os.OperatingSystem.current().isMacOsX()) {
+        dependsOn createMacInstaller
+    } else if (org.gradle.internal.os.OperatingSystem.current().isLinux()) {
+        dependsOn createLinuxInstaller
+    }
+    
+    doLast {
+        println "✅ 原生安裝包創建完成！"
+        println "📦 檔案位置: build/installers/"
+        
+        def installersDir = file("build/installers")
+        if (installersDir.exists()) {
+            installersDir.listFiles().each { file ->
+                println "   📄 ${file.name} (${file.length() / (1024*1024)} MB)"
+            }
+        }
+    }
 } 
