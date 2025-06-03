@@ -12,6 +12,10 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.net.URI;
 
 /**
  * Ollama管理類，負責下載、安裝和管理Ollama
@@ -111,36 +115,158 @@ public class OllamaManager {
         try {
             System.out.println("🔍 檢查端口 11434 是否被佔用...");
             
-            // 使用 lsof 找出佔用端口的進程
-            ProcessBuilder pb = new ProcessBuilder("lsof", "-ti", ":11434");
-            Process process = pb.start();
-            
-            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    String pid = line.trim();
-                    if (!pid.isEmpty()) {
-                        System.out.println("🔧 發現佔用端口的進程 PID: " + pid);
-                        
-                        // 檢查這個進程是否是 Ollama
-                        if (isOllamaProcess(pid)) {
-                            System.out.println("💀 終止舊的 Ollama 進程: " + pid);
-                            killProcess(pid);
-                        } else {
-                            System.out.println("⚠️ 發現非 Ollama 進程佔用端口: " + pid + "，跳過終止");
+            // 多重檢查端口狀態
+            if (!isPortAvailable(11434)) {
+                System.out.println("⚠️ 端口 11434 被佔用，開始端口清理...");
+                
+                // 使用 lsof 找出佔用端口的進程
+                ProcessBuilder pb = new ProcessBuilder("lsof", "-ti", ":11434");
+                Process process = pb.start();
+                
+                try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
+                    String line;
+                    boolean foundOllamaProcess = false;
+                    while ((line = reader.readLine()) != null) {
+                        String pid = line.trim();
+                        if (!pid.isEmpty()) {
+                            System.out.println("🔧 發現佔用端口的進程 PID: " + pid);
+                            
+                            // 檢查這個進程是否是 Ollama
+                            if (isOllamaProcess(pid)) {
+                                System.out.println("💀 終止舊的 Ollama 進程: " + pid);
+                                killProcess(pid);
+                                foundOllamaProcess = true;
+                            } else {
+                                System.out.println("⚠️ 發現非 Ollama 進程佔用端口: " + pid + "，跳過終止");
+                            }
                         }
                     }
+                    
+                    if (foundOllamaProcess) {
+                        // 如果終止了 Ollama 進程，等待端口釋放
+                        waitForPortRelease(11434, 10);
+                    }
                 }
+                
+                process.waitFor(5, TimeUnit.SECONDS);
+            } else {
+                System.out.println("✅ 端口 11434 可用");
             }
-            
-            process.waitFor(5, TimeUnit.SECONDS);
-            
-            // 等待一下讓端口釋放
-            Thread.sleep(2000);
             
         } catch (Exception e) {
             System.err.println("清理端口衝突時發生錯誤: " + e.getMessage());
         }
+    }
+    
+    /**
+     * 檢查指定端口是否可用
+     * @param port 要檢查的端口
+     * @return true 如果端口可用，false 如果被佔用
+     */
+    private boolean isPortAvailable(int port) {
+        try (java.net.ServerSocket socket = new java.net.ServerSocket(port)) {
+            socket.setReuseAddress(true);
+            return true;
+        } catch (IOException e) {
+            return false;
+        }
+    }
+    
+    /**
+     * 等待端口釋放
+     * @param port 要等待的端口
+     * @param maxWaitSeconds 最大等待秒數
+     * @return true 如果端口已釋放，false 如果超時
+     */
+    private boolean waitForPortRelease(int port, int maxWaitSeconds) {
+        System.out.println("⏳ 等待端口 " + port + " 釋放...");
+        
+        for (int i = 0; i < maxWaitSeconds; i++) {
+            if (isPortAvailable(port)) {
+                System.out.println("✅ 端口 " + port + " 已釋放");
+                return true;
+            }
+            
+            try {
+                Thread.sleep(1000);
+                System.out.print(".");
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return false;
+            }
+        }
+        
+        System.out.println("\n⚠️ 等待端口釋放超時");
+        return false;
+    }
+    
+    /**
+     * 檢查與 Ollama 服務的連接狀態
+     * @return 連接狀態和詳細信息
+     */
+    private ConnectionStatus checkOllamaConnection() {
+        // 1. 檢查端口是否可連接
+        if (!isPortReachable("localhost", 11434, 3000)) {
+            return new ConnectionStatus(false, "端口 11434 無法連接");
+        }
+        
+        // 2. 檢查 HTTP 服務是否回應
+        try {
+            java.net.URL url = new java.net.URL("http://localhost:11434/api/tags");
+            java.net.HttpURLConnection connection = (java.net.HttpURLConnection) url.openConnection();
+            connection.setRequestMethod("GET");
+            connection.setConnectTimeout(3000);
+            connection.setReadTimeout(3000);
+            
+            int responseCode = connection.getResponseCode();
+            if (responseCode == 200) {
+                return new ConnectionStatus(true, "Ollama 服務正常運行");
+            } else {
+                return new ConnectionStatus(false, "Ollama 服務回應異常: HTTP " + responseCode);
+            }
+        } catch (Exception e) {
+            return new ConnectionStatus(false, "無法連接到 Ollama 服務: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * 檢查指定主機和端口是否可達
+     * @param host 主機名
+     * @param port 端口號
+     * @param timeout 超時時間（毫秒）
+     * @return true 如果可達，false 否則
+     */
+    private boolean isPortReachable(String host, int port, int timeout) {
+        try (java.net.Socket socket = new java.net.Socket()) {
+            socket.connect(new java.net.InetSocketAddress(host, port), timeout);
+            return true;
+        } catch (IOException e) {
+            return false;
+        }
+    }
+    
+    /**
+     * 連接狀態類
+     */
+    private static class ConnectionStatus {
+        public final boolean isConnected;
+        public final String message;
+        
+        public ConnectionStatus(boolean isConnected, String message) {
+            this.isConnected = isConnected;
+            this.message = message;
+        }
+    }
+    
+    /**
+     * 增強的服務運行檢測
+     * @return true 如果服務正在運行
+     */
+    private boolean isOllamaServiceRunning() {
+        // 使用新的連接檢查方法
+        ConnectionStatus status = checkOllamaConnection();
+        System.out.println("🔗 Ollama 連接狀態: " + status.message);
+        return status.isConnected;
     }
     
     /**
@@ -342,22 +468,6 @@ public class OllamaManager {
             }
             isOllamaRunning = false;
             System.out.println("Ollama服務已停止");
-        }
-    }
-    
-    /**
-     * 檢查Ollama服務是否正在運行
-     */
-    private boolean isOllamaServiceRunning() {
-        try {
-            // 嘗試連接Ollama API端點來檢查服務是否運行
-            // 使用 /api/tags 端點，這是Ollama實際提供的端點
-            URL url = new URL("http://localhost:11434/api/tags");
-            InputStream in = url.openStream();
-            in.close();
-            return true;
-        } catch (Exception e) {
-            return false;
         }
     }
     
@@ -731,81 +841,148 @@ public class OllamaManager {
     }
     
     /**
-     * 關閉OllamaManager並釋放資源
-     */
-    public void shutdown() {
-        System.out.println("🔧 開始清理 Ollama 相關資源...");
-        
-        // 首先停止我們啟動的 Ollama 服務
-        stopOllamaService();
-        
-        // 然後清理所有 Ollama 進程
-        cleanupAllOllamaProcesses();
-        
-        // 關閉執行器
-        executor.shutdown();
-        try {
-            if (!executor.awaitTermination(5, TimeUnit.SECONDS)) {
-                executor.shutdownNow();
-            }
-        } catch (InterruptedException e) {
-            executor.shutdownNow();
-            Thread.currentThread().interrupt();
-        }
-        
-        System.out.println("✅ Ollama 資源清理完成");
-    }
-    
-    /**
-     * 清理所有 Ollama 進程
+     * 智能清理所有 Ollama 進程（僅在確實需要時）
      */
     private void cleanupAllOllamaProcesses() {
         try {
             System.out.println("🔍 搜索並清理所有 Ollama 進程...");
             
-            // 使用 ps 命令找出所有 Ollama 進程
+            // 檢查是否有其他應用正在使用 ollama
+            if (isOllamaBeingUsedByOtherApps()) {
+                System.out.println("⚠️ 檢測到其他應用正在使用 Ollama，不進行清理");
+                return;
+            }
+            
             ProcessBuilder pb = new ProcessBuilder("ps", "aux");
             Process process = pb.start();
             
-            List<String> ollamaPids = new ArrayList<>();
-            
             try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
                 String line;
+                int cleanedCount = 0;
                 while ((line = reader.readLine()) != null) {
-                    // 檢查是否是 Ollama 相關進程
-                    if ((line.contains("ollama") || line.contains(".ollama")) && !line.contains("grep")) {
-                        // 提取 PID (通常是第二列)
-                        String[] parts = line.trim().split("\\s+");
-                        if (parts.length >= 2) {
+                    if (line.contains("ollama") && !line.contains("grep")) {
+                        String[] parts = line.split("\\s+");
+                        if (parts.length > 1) {
                             String pid = parts[1];
-                            ollamaPids.add(pid);
                             System.out.println("🔍 發現 Ollama 進程: PID " + pid + " - " + line);
+                            
+                            // 只終止由我們啟動的進程
+                            if (shouldTerminateProcess(pid, line)) {
+                                System.out.println("🔧 正在終止 Ollama 進程: " + pid);
+                                killProcess(pid);
+                                cleanedCount++;
+                            } else {
+                                System.out.println("💼 保留系統或其他應用的 Ollama 進程: " + pid);
+                            }
                         }
+                    }
+                }
+                System.out.println("✅ 已清理 " + cleanedCount + " 個 Ollama 進程");
+            }
+            
+            process.waitFor(5, TimeUnit.SECONDS);
+        } catch (Exception e) {
+            System.err.println("清理 Ollama 進程時發生錯誤: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * 檢查是否有其他應用正在使用 Ollama
+     * @return true 如果有其他應用在使用
+     */
+    private boolean isOllamaBeingUsedByOtherApps() {
+        try {
+            // 檢查是否有活躍的 API 連接
+            HttpClient client = HttpClient.newHttpClient();
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create("http://localhost:11434/api/ps"))  // 檢查正在運行的模型
+                    .timeout(java.time.Duration.ofSeconds(2))
+                    .GET()
+                    .build();
+            
+            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() == 200) {
+                // 檢查回應內容，看是否有其他模型在運行
+                String responseBody = response.body();
+                return responseBody.contains("\"models\"") && !responseBody.contains("\"models\":[]");
+            }
+        } catch (Exception e) {
+            // 如果檢查失敗，保守做法是假設有其他應用在使用
+            System.out.println("⚠️ 無法檢查 Ollama 使用狀態，採取保守策略");
+            return true;
+        }
+        return false;
+    }
+    
+    /**
+     * 判斷是否應該終止指定進程
+     * @param pid 進程ID
+     * @param processLine 完整的進程信息行
+     * @return true 如果應該終止
+     */
+    private boolean shouldTerminateProcess(String pid, String processLine) {
+        try {
+            // 檢查進程的詳細信息
+            ProcessBuilder pb = new ProcessBuilder("ps", "-p", pid, "-o", "command=");
+            Process process = pb.start();
+            
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
+                String command = reader.readLine();
+                if (command != null) {
+                    // 只終止我們能確定是由我們管理的進程
+                    // 例如：通過特定的啟動參數或路徑來識別
+                    if (command.contains(ollamaPath.toString()) || 
+                        (ollamaProcess != null && pid.equals(String.valueOf(ollamaProcess.pid())))) {
+                        return true;
+                    }
+                    
+                    // 保留系統安裝的或其他應用管理的 ollama
+                    if (command.contains("/opt/homebrew") || 
+                        command.contains("/usr/local") ||
+                        command.contains("homebrew")) {
+                        return false;
                     }
                 }
             }
             
-            process.waitFor(5, TimeUnit.SECONDS);
-            
-            // 優雅地終止所有 Ollama 進程
-            for (String pid : ollamaPids) {
-                try {
-                    System.out.println("🔧 正在終止 Ollama 進程: " + pid);
-                    killProcess(pid);
-                    Thread.sleep(500); // 給進程一些時間來清理
-                } catch (Exception e) {
-                    System.err.println("⚠️ 終止進程 " + pid + " 時發生錯誤: " + e.getMessage());
-                }
-            }
-            
-            if (ollamaPids.isEmpty()) {
-                System.out.println("✅ 沒有發現 Ollama 進程需要清理");
-            } else {
-                System.out.println("✅ 已清理 " + ollamaPids.size() + " 個 Ollama 進程");
-            }
+            process.waitFor(2, TimeUnit.SECONDS);
+            return false;
             
         } catch (Exception e) {
-            System.err.println("⚠️ 清理 Ollama 進程時發生錯誤: " + e.getMessage());
+            // 如果無法確定，則不終止
+            return false;
+        }
+    }
+    
+    /**
+     * 安全關閉管理器，避免影響其他應用的 ollama 使用
+     */
+    public void shutdown() {
+        try {
+            System.out.println("🔧 開始清理 Ollama 相關資源...");
+            
+            // 只停止我們直接啟動的進程
+            if (ollamaProcess != null && ollamaProcess.isAlive()) {
+                System.out.println("🔧 停止我們啟動的 Ollama 進程...");
+                stopOllamaService();
+            } else {
+                System.out.println("💼 保留現有的 Ollama 服務供其他應用使用");
+            }
+            
+            // 等待線程池完成
+            executor.shutdown();
+            try {
+                if (!executor.awaitTermination(3, TimeUnit.SECONDS)) {
+                    executor.shutdownNow();
+                }
+            } catch (InterruptedException e) {
+                executor.shutdownNow();
+                Thread.currentThread().interrupt();
+            }
+            
+            System.out.println("✅ Ollama 資源清理完成");
+        } catch (Exception e) {
+            System.err.println("關閉 OllamaManager 時發生錯誤: " + e.getMessage());
         }
     }
 } 
