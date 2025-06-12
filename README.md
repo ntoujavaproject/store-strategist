@@ -104,16 +104,13 @@ A: 系統會自動嘗試從Google Maps收集資料，請確保餐廳名稱正確
 **Q: 評分顯示N/A？**
 A: 可能是評論收集失敗，系統會自動重試。
 
-**Q: 出現安全警告？**
-A: 在「系統偏好設定」→「安全性與隱私」中允許應用程式執行。
-
 ### 系統日誌
 - 應用程式運行日誌會顯示在控制台中
 - 如遇問題，請查看控制台輸出資訊
 
 ## 📜 版本歷史
 
-### v1.0.0 (2024)
+### v1.0.3 (2025)
 - 🎉 初始版本發布
 - ✨ 智能餐廳搜尋和資料收集
 - 🔧 Google Maps評論爬取功能
@@ -123,21 +120,6 @@ A: 在「系統偏好設定」→「安全性與隱私」中允許應用程式�
 - 📱 完整的 macOS DMG 安裝包
 - 🎨 現代化JavaFX用戶介面
 
-## 📄 授權條款
 
-本專案採用 MIT 授權條款。
 
-## 🤝 貢獻指南
-
-歡迎提交 Issue 和 Pull Request！
-
-1. Fork 本專案
-2. 創建功能分支 (`git checkout -b feature/AmazingFeature`)
-3. 提交更改 (`git commit -m 'Add some AmazingFeature'`)
-4. 推送到分支 (`git push origin feature/AmazingFeature`)
-5. 開啟 Pull Request
-
----
-
-📧 **聯絡資訊**：如有問題請透過 GitHub Issues 聯絡。
 

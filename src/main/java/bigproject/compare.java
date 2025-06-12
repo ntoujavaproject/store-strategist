@@ -3331,17 +3331,17 @@ public class compare extends Application implements UIManager.StateChangeListene
         
         if (featuredDataFile.exists()) {
             System.out.println("✅ [INFO] 發現已收集的精選評論數據，直接使用此數據進行分析");
-            
-            Platform.runLater(() -> {
+        
+        Platform.runLater(() -> {
                 rightPanel.getFeaturesArea().setText("🤖 AI 正在分析精選評論內容...\n\n生成特色摘要中，請稍候...\n\n" +
-                    "調試信息：\n" +
-                    "• 餐廳名稱：" + restaurantName + "\n" +
-                    "• 餐廳ID：" + restaurantId + "\n" +
+                "調試信息：\n" +
+                "• 餐廳名稱：" + restaurantName + "\n" +
+                "• 餐廳ID：" + restaurantId + "\n" +
                     "• 狀態：使用已收集的精選評論進行分析");
-            });
-            
-            new Thread(() -> {
-                try {
+        });
+        
+        new Thread(() -> {
+            try {
                     // 讀取精選評論數據
                     String jsonContent = new String(java.nio.file.Files.readAllBytes(featuredDataFile.toPath()));
                     JSONObject result = new JSONObject(jsonContent);
@@ -3474,14 +3474,14 @@ public class compare extends Application implements UIManager.StateChangeListene
     
     // 使用 Firestore 數據進行分析的方法
     private void useFirestoreForAnalysis(String restaurantId, String restaurantName) {
-        Platform.runLater(() -> {
-            rightPanel.getFeaturesArea().setText("🤖 AI 正在分析評論內容...\n\n生成特色摘要中，請稍候...\n\n" +
-                "調試信息：\n" +
-                "• 餐廳名稱：" + restaurantName + "\n" +
-                "• 餐廳ID：" + restaurantId + "\n" +
-                "• 狀態：正在調用 FirestoreRestaurantAnalyzer");
-        });
-        
+                Platform.runLater(() -> {
+                    rightPanel.getFeaturesArea().setText("🤖 AI 正在分析評論內容...\n\n生成特色摘要中，請稍候...\n\n" +
+                        "調試信息：\n" +
+                        "• 餐廳名稱：" + restaurantName + "\n" +
+                        "• 餐廳ID：" + restaurantId + "\n" +
+                        "• 狀態：正在調用 FirestoreRestaurantAnalyzer");
+                });
+                
         new Thread(() -> {
             try {
                 System.out.println("🚀 [INFO] 開始 Firestore 特色分析: " + restaurantName + " (ID: " + restaurantId + ")");
