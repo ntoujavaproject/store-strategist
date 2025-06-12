@@ -57,6 +57,31 @@ def collect_and_upload_restaurant(restaurant_name):
         restaurant.upload_to_firestore()
         
         print("餐廳資訊已成功上傳至 Firestore。")
+        
+        # 自動同步到 Algolia
+        print("正在自動同步到 Algolia 搜尋引擎...")
+        try:
+            import subprocess
+            import os
+            
+            # 執行 auto_sync_restaurant.py
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            sync_script = os.path.join(script_dir, '..', 'scripts', 'auto_sync_restaurant.py')
+            
+            result = subprocess.run([
+                sys.executable, sync_script, restaurant_name_actual
+            ], capture_output=True, text=True, timeout=30)
+            
+            if result.returncode == 0:
+                print("✅ 已自動同步到 Algolia！現在可以搜尋到這家餐廳了。")
+            else:
+                print("⚠️ Algolia 同步失敗，但 Firebase 上傳成功")
+                print(f"錯誤訊息：{result.stderr}")
+                
+        except Exception as sync_error:
+            print(f"⚠️ 自動同步時發生錯誤：{sync_error}")
+            print("Firebase 上傳成功，但可能需要手動同步到搜尋引擎")
+        
         return {
             'success': True,
             'restaurant_id': restaurant_id,

@@ -590,18 +590,18 @@ public class UIManager {
         
         stepsBox.getChildren().addAll(step1, step2, step3, tip);
 
-        // 收集資料選項
-        VBox collectOption = new VBox(12);
-        collectOption.setAlignment(Pos.CENTER);
-        collectOption.setStyle("-fx-background-color: rgba(255, 235, 210, 0.8); -fx-padding: 20; -fx-background-radius: 10;");
+        // 重新搜尋選項
+        VBox retrySearchOption = new VBox(12);
+        retrySearchOption.setAlignment(Pos.CENTER);
+        retrySearchOption.setStyle("-fx-background-color: rgba(255, 235, 210, 0.8); -fx-padding: 20; -fx-background-radius: 10;");
         
-        Label collectTitle = new Label("📋 檢查資料庫並收集");
-        collectTitle.setFont(Font.font("System", FontWeight.BOLD, 16));
-        collectTitle.setStyle("-fx-text-fill: #F57C00;");
+        Label retryTitle = new Label("🔍 重新搜尋餐廳");
+        retryTitle.setFont(Font.font("System", FontWeight.BOLD, 16));
+        retryTitle.setStyle("-fx-text-fill: #F57C00;");
         
-        Label collectDesc = new Label("請輸入完整的餐廳名稱（包含分店資訊）：");
-        collectDesc.setWrapText(true);
-        collectDesc.setStyle("-fx-text-fill: #F57C00; -fx-font-weight: bold;");
+        Label retryDesc = new Label("請輸入完整的餐廳名稱（包含分店資訊）：");
+        retryDesc.setWrapText(true);
+        retryDesc.setStyle("-fx-text-fill: #F57C00; -fx-font-weight: bold;");
         
         // 添加輸入欄位
         TextField restaurantNameField = new TextField();
@@ -612,22 +612,22 @@ public class UIManager {
         Label inputTip = new Label("💡 請從 Google Maps 複製完整名稱貼上");
         inputTip.setStyle("-fx-text-fill: #666666; -fx-font-size: 12px; -fx-font-style: italic;");
         
-        Button collectButton = new Button("檢查並上傳餐廳資料");
-        collectButton.setStyle("-fx-background-color: #FF9800; -fx-text-fill: white; -fx-font-size: 14px; -fx-padding: 10 20; -fx-background-radius: 8;");
-        collectButton.setOnAction(e -> {
+        Button retrySearchButton = new Button("重新搜尋");
+        retrySearchButton.setStyle("-fx-background-color: #FF9800; -fx-text-fill: white; -fx-font-size: 14px; -fx-padding: 10 20; -fx-background-radius: 8;");
+        retrySearchButton.setOnAction(e -> {
             String fullRestaurantName = restaurantNameField.getText().trim();
             if (fullRestaurantName.isEmpty()) {
                 // 顯示提示
                 Label errorLabel = new Label("⚠️ 請輸入餐廳名稱");
                 errorLabel.setStyle("-fx-text-fill: #D32F2F; -fx-font-weight: bold;");
-                if (!collectOption.getChildren().contains(errorLabel)) {
-                    collectOption.getChildren().add(collectOption.getChildren().size() - 1, errorLabel);
+                if (!retrySearchOption.getChildren().contains(errorLabel)) {
+                    retrySearchOption.getChildren().add(retrySearchOption.getChildren().size() - 1, errorLabel);
                     // 使用簡單的線程來移除錯誤提示
                     new Thread(() -> {
                         try {
                             Thread.sleep(3000);
                             javafx.application.Platform.runLater(() -> {
-                                collectOption.getChildren().remove(errorLabel);
+                                retrySearchOption.getChildren().remove(errorLabel);
                             });
                         } catch (InterruptedException ignored) {}
                     }).start();
@@ -635,15 +635,20 @@ public class UIManager {
                 return;
             }
             
-            if (collectAction != null) {
-                // 使用回調介面，讓 compare.java 處理完整名稱的收集
-                if (fullNameCollectCallback != null) {
-                    fullNameCollectCallback.accept(fullRestaurantName);
-                }
+            // 直接執行重新搜尋，回到主畫面並搜尋新名稱
+            showMainView();
+            isRestaurantNotFoundShowing = false;
+            if (stateChangeListener != null) {
+                stateChangeListener.onRestaurantNotFoundStateChanged(false);
+            }
+            
+            // 使用回調介面，讓 compare.java 處理重新搜尋
+            if (fullNameCollectCallback != null) {
+                fullNameCollectCallback.accept(fullRestaurantName);
             }
         });
         
-        collectOption.getChildren().addAll(collectTitle, collectDesc, restaurantNameField, inputTip, collectButton);
+        retrySearchOption.getChildren().addAll(retryTitle, retryDesc, restaurantNameField, inputTip, retrySearchButton);
 
         // 地圖開啟選項
         VBox mapOption = new VBox(10);
@@ -680,11 +685,11 @@ public class UIManager {
         });
 
         // 按鈕懸停效果
-        collectButton.setOnMouseEntered(e -> collectButton.setStyle("-fx-background-color: #45A049; -fx-text-fill: white; -fx-font-size: 14px; -fx-padding: 10 20; -fx-background-radius: 8;"));
-        collectButton.setOnMouseExited(e -> collectButton.setStyle("-fx-background-color: #4CAF50; -fx-text-fill: white; -fx-font-size: 14px; -fx-padding: 10 20; -fx-background-radius: 8;"));
+        retrySearchButton.setOnMouseEntered(e -> retrySearchButton.setStyle("-fx-background-color: #E68A00; -fx-text-fill: white; -fx-font-size: 14px; -fx-padding: 10 20; -fx-background-radius: 8;"));
+        retrySearchButton.setOnMouseExited(e -> retrySearchButton.setStyle("-fx-background-color: #FF9800; -fx-text-fill: white; -fx-font-size: 14px; -fx-padding: 10 20; -fx-background-radius: 8;"));
         
-        mapButton.setOnMouseEntered(e -> mapButton.setStyle("-fx-background-color: #F57C00; -fx-text-fill: white; -fx-font-size: 14px; -fx-padding: 10 20; -fx-background-radius: 8;"));
-        mapButton.setOnMouseExited(e -> mapButton.setStyle("-fx-background-color: #FF9800; -fx-text-fill: white; -fx-font-size: 14px; -fx-padding: 10 20; -fx-background-radius: 8;"));
+        mapButton.setOnMouseEntered(e -> mapButton.setStyle("-fx-background-color: #45A049; -fx-text-fill: white; -fx-font-size: 14px; -fx-padding: 10 20; -fx-background-radius: 8;"));
+        mapButton.setOnMouseExited(e -> mapButton.setStyle("-fx-background-color: #4CAF50; -fx-text-fill: white; -fx-font-size: 14px; -fx-padding: 10 20; -fx-background-radius: 8;"));
         
         backButton.setOnMouseEntered(e -> backButton.setStyle("-fx-background-color: #616161; -fx-text-fill: white; -fx-font-size: 14px; -fx-padding: 10 20; -fx-background-radius: 8;"));
         backButton.setOnMouseExited(e -> backButton.setStyle("-fx-background-color: #757575; -fx-text-fill: white; -fx-font-size: 14px; -fx-padding: 10 20; -fx-background-radius: 8;"));
@@ -692,7 +697,7 @@ public class UIManager {
         // 選項容器
         HBox optionsBox = new HBox(30);
         optionsBox.setAlignment(Pos.CENTER);
-        optionsBox.getChildren().addAll(collectOption, mapOption);
+        optionsBox.getChildren().addAll(retrySearchOption, mapOption);
 
         notFoundContent.getChildren().addAll(titleLabel, messageLabel, descriptionLabel, stepsBox, optionsBox, backButton);
 

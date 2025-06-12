@@ -94,6 +94,9 @@ import javafx.scene.input.ScrollEvent;
 import bigproject.RightPanel;
 import bigproject.SearchBar;  // 添加 SearchBar 引用
 import bigproject.ai.AIProgressDialog;
+import java.io.FileWriter;
+import java.util.List;
+import java.util.ArrayList;
 
 /**
  * 餐廳市場分析系統主應用程式
@@ -749,7 +752,38 @@ public class compare extends Application implements UIManager.StateChangeListene
         
         // Set this class as the state change listener
         uiManager.setStateChangeListener(this);
-        uiManager.setFullNameCollectCallback(this::collectAndUploadRestaurantToFirebase); // 設置完整名稱收集回調
+        // 設置重新搜尋回調，先檢查 Algolia，如果沒找到再檢查 Google Maps
+        uiManager.setFullNameCollectCallback(fullRestaurantName -> {
+            System.out.println("重新搜尋餐廳：" + fullRestaurantName);
+            
+            // 使用新的智能搜尋邏輯
+            new Thread(() -> {
+                try {
+                    // 1. 先檢查 Algolia
+                    org.json.JSONObject searchResult = new bigproject.search.AlgoliaRestaurantSearch().performSearch(fullRestaurantName, true);
+                    int hitsCount = searchResult.getInt("nbHits");
+                    
+                    Platform.runLater(() -> {
+                        if (hitsCount > 0) {
+                            // 在 Algolia 找到，直接顯示結果
+                            System.out.println("✅ 在 Algolia 找到餐廳：" + fullRestaurantName);
+                            handleSearch(fullRestaurantName);
+                        } else {
+                            // 2. Algolia 沒找到，檢查 Google Maps 是否存在
+                            System.out.println("❌ Algolia 中找不到，檢查 Google Maps...");
+                            checkAndCollectFromGoogleMaps(fullRestaurantName);
+                        }
+                    });
+                    
+                } catch (Exception e) {
+                    e.printStackTrace();
+                    Platform.runLater(() -> {
+                        System.out.println("⚠️ 搜尋時發生錯誤，回退到基本搜尋");
+                        handleSearch(fullRestaurantName);
+                    });
+                }
+            }).start();
+        });
         preferencesManager.setStateChangeListener(this);
 
         // --- Update font style using UIManager ---
@@ -981,6 +1015,10 @@ public class compare extends Application implements UIManager.StateChangeListene
         if ("collection".equals(dataSource)) {
             // 如果需要從 Google Maps 收集資料
             collectAndUploadRestaurantToFirebase(restaurantName);
+        } else if ("not_found".equals(dataSource)) {
+            // 直接顯示餐廳未找到頁面，讓用戶重新搜尋
+            System.out.println("❌ 餐廳不在資料庫中：" + restaurantName + "，顯示未找到頁面");
+            showRestaurantNotFoundView(restaurantName);
         } else {
             // 直接處理已存在於資料庫的餐廳
             handleRestaurantFromDatabase(restaurantName, restaurantId);
@@ -1554,15 +1592,48 @@ public class compare extends Application implements UIManager.StateChangeListene
         Platform.runLater(() -> {
             clearRestaurantDataDisplay("在資料庫中找不到「" + query + "」");
             
-            // 使用 UIManager 的新方法來顯示整個畫面
+            // 使用 UIManager 的方法來顯示整個畫面，但回調已改為重新搜尋
             uiManager.showRestaurantNotFoundView(query, 
-                // 收集資料的動作 - 注意：這個回調不會被使用，
-                // 實際的餐廳名稱會透過 fullNameCollectCallback 傳入
-                () -> collectAndUploadRestaurantToFirebase(query),
+                // 這個回調不會被使用，實際的餐廳名稱會透過 fullNameCollectCallback 傳入
+                null,
                 // 開啟地圖的動作
                 () -> SearchBar.openMapInBrowser(query)
             );
         });
+    }
+    
+    /**
+     * 檢查 Google Maps 是否存在該餐廳，如果存在則自動收集並同步
+     */
+    private void checkAndCollectFromGoogleMaps(String query) {
+        new Thread(() -> {
+            try {
+                // 檢查餐廳是否存在於 Google Maps
+                String foundRestaurantName = checkRestaurantNameFromGoogleMaps(query);
+                
+                if (foundRestaurantName != null && !foundRestaurantName.isEmpty()) {
+                    Platform.runLater(() -> {
+                        System.out.println("🔍 在 Google Maps 找到餐廳：" + foundRestaurantName + "，開始自動收集資料...");
+                        // 餐廳存在於 Google Maps，自動收集資料
+                        collectAndUploadRestaurantToFirebase(query);
+                    });
+                } else {
+                    Platform.runLater(() -> {
+                        System.out.println("❌ 在 Google Maps 也找不到餐廳：" + query);
+                        // 餐廳確實不存在，顯示未找到頁面
+                        showRestaurantNotFoundView(query);
+                    });
+                }
+                
+            } catch (Exception e) {
+                e.printStackTrace();
+                Platform.runLater(() -> {
+                    System.out.println("⚠️ 檢查 Google Maps 時發生錯誤：" + e.getMessage());
+                    // 發生錯誤時顯示未找到頁面
+                    showRestaurantNotFoundView(query);
+                });
+            }
+        }).start();
     }
     
     /**
@@ -2148,10 +2219,43 @@ public class compare extends Application implements UIManager.StateChangeListene
                 org.json.JSONArray featuredPhotos = result.optJSONArray("featured_photos");
                 int totalReviews = result.optInt("total_reviews", 0);
                 
+                // 按評分排序評論
+                if (featuredReviews != null && featuredReviews.length() > 0) {
+                    // 創建一個可排序的列表
+                    List<org.json.JSONObject> reviewList = new ArrayList<>();
+                    for (int i = 0; i < featuredReviews.length(); i++) {
+                        reviewList.add(featuredReviews.getJSONObject(i));
+                    }
+                    
+                    // 按評分從高到低排序
+                    reviewList.sort((r1, r2) -> {
+                        int rating1 = r1.optInt("star_rating", 0);
+                        int rating2 = r2.optInt("star_rating", 0);
+                        return Integer.compare(rating2, rating1); // 降序排列
+                    });
+                    
+                    // 創建新的排序後的 JSONArray
+                    org.json.JSONArray sortedReviews = new org.json.JSONArray();
+                    for (org.json.JSONObject review : reviewList) {
+                        sortedReviews.put(review);
+                    }
+                    
+                    // 更新原始 JSON 對象中的評論數組
+                    result.put("featured_reviews", sortedReviews);
+                    
+                    // 將排序後的結果寫回臨時文件
+                    try (java.io.FileWriter writer = new java.io.FileWriter(jsonPath)) {
+                        writer.write(result.toString());
+                    }
+                    
+                    // 使用排序後的評論
+                    featuredReviews = sortedReviews;
+                }
+                
                 // 更新評論區域
                 StringBuilder reviewsText = new StringBuilder();
                 reviewsText.append("餐廳：").append(actualRestaurantName).append("\n");
-                reviewsText.append("共收集到 ").append(totalReviews).append(" 則評論，以下為精選評論：\n\n");
+                reviewsText.append("共收集到 ").append(totalReviews).append(" 則評論，以下為評分排序的精選評論：\n\n");
                 
                 if (featuredReviews != null && featuredReviews.length() > 0) {
                     for (int i = 0; i < featuredReviews.length(); i++) {
@@ -3219,45 +3323,169 @@ public class compare extends Application implements UIManager.StateChangeListene
      * 啟動 Firestore 特色分析
      */
     private void startFirestoreFeatureAnalysis(String restaurantId, String restaurantName) {
-        // 🔍 調試：檢查傳入的參數
-        System.out.println("🔍 [DEBUG] startFirestoreFeatureAnalysis 被調用");
-        System.out.println("🔍 [DEBUG] 傳入的 restaurantId: " + restaurantId);
-        System.out.println("🔍 [DEBUG] 傳入的 restaurantName: " + restaurantName);
-        System.out.println("🔍 [DEBUG] 當前執行緒: " + Thread.currentThread().getName());
+        System.out.println("🚀 [INFO] 開始特色分析: " + restaurantName + " (ID: " + restaurantId + ")");
         
-        if (restaurantId == null || restaurantId.isEmpty()) {
-            System.out.println("❌ [ERROR] 餐廳 ID 為空或null，無法進行分析");
+        // 檢查是否已有精選評論數據
+        String tempFeaturedDataPath = "temp_featured_data.json";
+        File featuredDataFile = new File(tempFeaturedDataPath);
+        
+        if (featuredDataFile.exists()) {
+            System.out.println("✅ [INFO] 發現已收集的精選評論數據，直接使用此數據進行分析");
+            
             Platform.runLater(() -> {
-                rightPanel.getFeaturesArea().setText("❌ 無法獲取餐廳ID，無法進行特色分析\n\n" +
+                rightPanel.getFeaturesArea().setText("🤖 AI 正在分析精選評論內容...\n\n生成特色摘要中，請稍候...\n\n" +
                     "調試信息：\n" +
-                    "• 餐廳名稱：" + (restaurantName != null ? restaurantName : "null") + "\n" +
-                    "• 餐廳ID：" + (restaurantId != null ? restaurantId : "null") + "\n" +
-                    "• 可能原因：搜尋結果沒有包含有效的餐廳ID");
+                    "• 餐廳名稱：" + restaurantName + "\n" +
+                    "• 餐廳ID：" + restaurantId + "\n" +
+                    "• 狀態：使用已收集的精選評論進行分析");
             });
-            return;
+            
+            new Thread(() -> {
+                try {
+                    // 讀取精選評論數據
+                    String jsonContent = new String(java.nio.file.Files.readAllBytes(featuredDataFile.toPath()));
+                    JSONObject result = new JSONObject(jsonContent);
+                    
+                    JSONArray featuredReviews = result.optJSONArray("featured_reviews");
+                    int totalReviews = result.optInt("total_reviews", 0);
+                    
+                    if (featuredReviews != null && featuredReviews.length() > 0) {
+                        // 提取評論文本
+                        StringBuilder allComments = new StringBuilder();
+                        int validComments = 0;
+                        
+                        for (int i = 0; i < featuredReviews.length(); i++) {
+                            JSONObject review = featuredReviews.getJSONObject(i);
+                            String comment = review.optString("comment", "");
+                            if (!comment.isEmpty()) {
+                                allComments.append(comment).append("\n\n");
+                                validComments++;
+                            }
+                        }
+                        
+                        // 創建臨時輸出檔案來接收分析結果
+                        String tempOutputFile = "temp_analysis_" + restaurantId + "_" + System.currentTimeMillis() + ".json";
+                        
+                        System.out.println("🔍 [DEBUG] 準備使用精選評論進行 AI 分析");
+                        System.out.println("🔍 [DEBUG] 有效評論數: " + validComments);
+                        
+                        // 建立 Prompt 與呼叫 Ollama
+                        String prompt = "你是專業的餐飲評論分析師，請根據下方多則顧客留言，" +
+                            "用「繁體中文」寫一份詳細的分析報告，包含：\n\n" +
+                            "**菜色飲品特色：** 分析顧客對餐點、飲品的評價，包括味道、品質、特色菜品等。\n\n" +
+                            "**服務優缺點：** 詳細說明服務人員的態度、專業度、服務速度等優缺點。\n\n" +
+                            "**店內氛圍：** 描述用餐環境、裝潢風格、舒適度、適合的場合等。\n\n" +
+                            "**經營改善建議：** 基於顧客反饋，提供具體可行的經營改善建議。\n\n" +
+                            "請提供完整詳細的分析，每個部分都要充分說明，" +
+                            "文字要自然流暢，不要使用條列符號或標題格式。\n\n" +
+                            "顧客留言：\n" + allComments.toString();
+                        
+                        System.out.println("📞 [INFO] 正在調用 Ollama API 進行分析...");
+                        String summary = bigproject.ai.OllamaAPI.generateCompletion(prompt);
+                        System.out.println("✅ [INFO] Ollama API 調用完成");
+                        
+                        // 若模型誤回英文，再翻譯一次
+                        if (!looksChinese(summary)) {
+                            System.out.println("⚠️ 偵測到非中文回應，進行翻譯...");
+                            summary = bigproject.ai.OllamaAPI.generateCompletion(
+                                "請把下列內容完整翻成「繁體中文」，不要加任何註解：\n" + summary);
+                        }
+                        
+                        // 創建分析結果 JSON
+                        JSONObject analysisResult = new JSONObject();
+                        analysisResult.put("analysis_time", java.time.OffsetDateTime.now().toString());
+                        analysisResult.put("summary", summary);
+                        analysisResult.put("restaurant_id", restaurantId);
+                        analysisResult.put("total_reviews", totalReviews);
+                        analysisResult.put("valid_comments", validComments);
+                        
+                        // 寫入臨時文件
+                        try (FileWriter writer = new FileWriter(tempOutputFile)) {
+                            writer.write(analysisResult.toString(2));
+                        }
+                        
+                        // 讀取分析結果
+                        File resultFile = new File(tempOutputFile);
+                        String finalAnalysisResult;
+                        
+                        if (resultFile.exists()) {
+                            try {
+                                // 讀取 JSON 結果文件
+                                String resultContent = new String(java.nio.file.Files.readAllBytes(resultFile.toPath()));
+                                JSONObject result2 = new JSONObject(resultContent);
+                                
+                                String summaryText = result2.optString("summary", "分析結果不可用");
+                                
+                                finalAnalysisResult = "🎯 AI 特色分析結果\n" +
+                                                   "━━━━━━━━━━━━━━━━━━━━━━━━━\n" +
+                                                   "📍 餐廳: " + restaurantName + "\n" +
+                                                   "📊 分析評論數: " + result2.optInt("total_reviews", 0) + " 條\n" +
+                                                   "✅ 有效評論數: " + result2.optInt("valid_comments", 0) + " 條\n" +
+                                                   "⏰ 分析時間: " + result2.optString("analysis_time", "未知") + "\n" +
+                                                   "━━━━━━━━━━━━━━━━━━━━━━━━━\n\n" +
+                                                   summaryText;
+                                
+                                // 清理臨時文件
+                                resultFile.delete();
+                                
+                            } catch (Exception e) {
+                                System.err.println("❌ [ERROR] 讀取分析結果時發生錯誤: " + e.getMessage());
+                                e.printStackTrace();
+                                finalAnalysisResult = "讀取分析結果時發生錯誤：" + e.getMessage();
+                                resultFile.delete(); // 確保清理
+                            }
+                        } else {
+                            finalAnalysisResult = "⚠️ 無法生成分析結果文件";
+                        }
+                        
+                        // 更新 UI
+                        final String displayResult = finalAnalysisResult;
+                        Platform.runLater(() -> {
+                            rightPanel.getFeaturesArea().setText(displayResult);
+                            System.out.println("✅ [INFO] 特色分析完成並顯示: " + restaurantName);
+                            
+                            // 如果 AI 聊天正在活躍狀態，更新其初始內容
+                            if (aiChat != null && aiChat.isActive()) {
+                                System.out.println("🤖 檢測到活躍的 AI 聊天，更新初始內容");
+                                aiChat.updateInitialContent(displayResult);
+                            }
+                        });
+                        
+                    } else {
+                        System.out.println("⚠️ [WARN] 精選評論為空，回退到使用 Firestore 數據");
+                        useFirestoreForAnalysis(restaurantId, restaurantName);
+                    }
+                    
+                } catch (Exception e) {
+                    System.err.println("❌ [ERROR] 使用精選評論分析時發生錯誤: " + e.getMessage());
+                    e.printStackTrace();
+                    
+                    // 如果使用精選評論失敗，回退到使用 Firestore
+                    System.out.println("⚠️ [WARN] 回退到使用 Firestore 數據");
+                    useFirestoreForAnalysis(restaurantId, restaurantName);
+                }
+            }).start();
+            
+        } else {
+            System.out.println("ℹ️ [INFO] 未發現精選評論數據，使用 Firestore 數據");
+            useFirestoreForAnalysis(restaurantId, restaurantName);
         }
-        
+    }
+    
+    // 使用 Firestore 數據進行分析的方法
+    private void useFirestoreForAnalysis(String restaurantId, String restaurantName) {
         Platform.runLater(() -> {
-            rightPanel.getFeaturesArea().setText("🔄 正在分析餐廳特色...\n\n從 Firestore 載入評論資料中，請稍候...\n\n" +
+            rightPanel.getFeaturesArea().setText("🤖 AI 正在分析評論內容...\n\n生成特色摘要中，請稍候...\n\n" +
                 "調試信息：\n" +
                 "• 餐廳名稱：" + restaurantName + "\n" +
                 "• 餐廳ID：" + restaurantId + "\n" +
-                "• 狀態：準備開始分析");
+                "• 狀態：正在調用 FirestoreRestaurantAnalyzer");
         });
         
         new Thread(() -> {
             try {
                 System.out.println("🚀 [INFO] 開始 Firestore 特色分析: " + restaurantName + " (ID: " + restaurantId + ")");
                 
-                Platform.runLater(() -> {
-                    rightPanel.getFeaturesArea().setText("🤖 AI 正在分析評論內容...\n\n生成特色摘要中，請稍候...\n\n" +
-                        "調試信息：\n" +
-                        "• 餐廳名稱：" + restaurantName + "\n" +
-                        "• 餐廳ID：" + restaurantId + "\n" +
-                        "• 狀態：正在調用 FirestoreRestaurantAnalyzer");
-                });
-                
-                // 🎯 使用現有的 FirestoreRestaurantAnalyzer.main() 方法
                 // 創建臨時輸出檔案來接收分析結果
                 String tempOutputFile = "temp_analysis_" + restaurantId + "_" + System.currentTimeMillis() + ".json";
                 String[] args = {restaurantId, tempOutputFile};
@@ -3374,6 +3602,14 @@ public class compare extends Application implements UIManager.StateChangeListene
                 });
             }
         }).start();
+    }
+    
+    // 檢查文本是否為中文的輔助方法
+    private boolean looksChinese(String text) {
+        long han = text.codePoints()
+                .filter(cp -> Character.UnicodeScript.of(cp) == Character.UnicodeScript.HAN)
+                .count();
+        return han >= text.length() * 0.3;
     }
     
     /**

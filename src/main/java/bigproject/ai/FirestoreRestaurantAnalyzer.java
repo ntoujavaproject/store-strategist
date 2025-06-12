@@ -55,17 +55,35 @@ public class FirestoreRestaurantAnalyzer {
         // 2️⃣ 萃取「評論」欄位文字，同步排除由 Guided Dining 標籤產生的假評論
         StringJoiner sj = new StringJoiner("\n");
         int validComments = 0;
+        int maxCommentsToProcess = 10; // 限制只處理10條精選評論，提高速度
+        
+        // 收集所有有效評論並存儲評分
+        List<Map.Entry<String, Double>> ratedComments = new ArrayList<>();
+        
         for (JsonNode doc : docs) {
             JsonNode fields = doc.get("fields");
             if (fields == null) continue;
-            JsonNode comment = fields.get("comment");      // ← 依你的欄位名稱調整
+            
+            // 獲取評論內容
+            JsonNode comment = fields.get("comment");
             if (comment == null || comment.isNull()) continue;
-
+            
+            // 獲取評分
+            JsonNode rating = fields.get("rating");
+            double ratingValue = 0.0;
+            if (rating != null && !rating.isNull()) {
+                if (rating.has("doubleValue")) {
+                    ratingValue = rating.get("doubleValue").asDouble();
+                } else if (rating.has("integerValue")) {
+                    ratingValue = rating.get("integerValue").asDouble();
+                }
+            }
+            
+            // 處理評論文本
             if (comment.has("stringValue")) {
                 String commentText = comment.get("stringValue").asText();
                 if (!commentText.startsWith("GUIDED_DINING_")) {
-                    sj.add(commentText);
-                    validComments++;
+                    ratedComments.add(new AbstractMap.SimpleEntry<>(commentText, ratingValue));
                 }
             } else if (comment.has("arrayValue")) {
                 JsonNode arr = comment.get("arrayValue").get("values");
@@ -79,12 +97,20 @@ public class FirestoreRestaurantAnalyzer {
                     if (n.has("stringValue")) {
                         String commentText = n.get("stringValue").asText();
                         if (!commentText.startsWith("GUIDED_DINING_")) {
-                            sj.add(commentText);
-                            validComments++;
+                            ratedComments.add(new AbstractMap.SimpleEntry<>(commentText, ratingValue));
                         }
                     }
                 }
             }
+        }
+        
+        // 按評分從高到低排序評論
+        ratedComments.sort((e1, e2) -> Double.compare(e2.getValue(), e1.getValue()));
+        
+        // 只取前 maxCommentsToProcess 條評論
+        for (int i = 0; i < Math.min(maxCommentsToProcess, ratedComments.size()); i++) {
+            sj.add(ratedComments.get(i).getKey());
+            validComments++;
         }
 
         String allComments = sj.toString().trim();
@@ -92,7 +118,7 @@ public class FirestoreRestaurantAnalyzer {
             System.err.println("❌ 沒有可用的文字評論，無法分析。");
             return;
         }
-        System.out.println("✅ 處理了 " + validComments + " 條有效評論");
+        System.out.println("✅ 處理了 " + validComments + " 條精選評論 (按評分排序，最多處理 " + maxCommentsToProcess + " 條)");
 
         // 3️⃣ 建立 Prompt 與呼叫 Ollama（使用自動下載系統）
         System.out.println("🤖 準備 AI 分析...");

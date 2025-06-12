@@ -519,7 +519,7 @@ public class SearchHomePage {
         
         // 添加點擊事件
         item.setOnMouseClicked(e -> {
-            selectRestaurant(originalQuery, "", "collection");
+            selectRestaurant(originalQuery, "", "not_found");
         });
         
         // 添加懸停效果

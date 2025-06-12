@@ -288,24 +288,6 @@ public class AIChat {
         // 設置較高的字體大小以改善顯示
         userInputField.setFont(Font.font("System", 16));
         
-        // 添加中文輸入法支援和字符過濾
-        userInputField.textProperty().addListener((observable, oldValue, newValue) -> {
-            if (newValue != null) {
-                // 過濾掉注音符號，只保留正常的中文字符、英文字符和標點符號
-                String filteredText = newValue.replaceAll("[ㄅ-ㄩˊˇˋ˙]", "");
-                
-                // 如果過濾後的文字與原文字不同，更新文字框內容
-                if (!filteredText.equals(newValue)) {
-                    Platform.runLater(() -> {
-                        int caretPosition = userInputField.getCaretPosition();
-                        userInputField.setText(filteredText);
-                        // 保持游標位置
-                        userInputField.positionCaret(Math.min(caretPosition, filteredText.length()));
-                    });
-                }
-            }
-        });
-        
         // 當輸入框獲得焦點時，確保正確的輸入法狀態
         userInputField.focusedProperty().addListener((obs, wasFocused, isNowFocused) -> {
             if (isNowFocused) {

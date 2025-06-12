@@ -38,22 +38,33 @@ ENV/
 # VS Code
 .vscode/
 
-# ADF files
-*.adf
-
-# Large files & sensitive data
+# 系統生成檔案
 *.log
 /logs/
 *.tmp
+*.pyc
+*.pyo
+*.egg-info/
+.coverage
+.pytest_cache/
 
 # 臨時評分分析檔案
 rating_analysis_*.json
+**/rating_analysis_*.json
+
+# 精選評論臨時檔案
+temp_featured_data.json
+featured_*.json
+**/temp_featured_data.json
+**/featured_*.json
 
 # Chat 歷史檔案（如果太大）
 chat_history/*.json
 
-# 發布相關臨時檔案
-release-notes.md
+# 測試檔案
+test_*.py
+debug_*.txt
 
-# JSON data (如果太大且屬於測試數據，可考慮排除)
-dist/餐廳分析器-智能安裝版.zip
+# DMG 建置檔案
+*.dmg
+RestaurantAnalyzer.app/

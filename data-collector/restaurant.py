@@ -54,16 +54,55 @@ class Restaurant:
             }
 
             response = requests.get(comment_url, params=params, headers=headers1)
-            data = json.loads(emoji.demojize(response.text[4:]))
-            #print(f"第 {page} 抓取結束")
+            raw_text = response.text
+            
+            # 檢查回應是否有效
+            if response.status_code != 200:
+                print(f"⚠️ Google Maps API 回應錯誤 {response.status_code} - 餐廳: {self.name}")
+                if page == 1:
+                    print(f"❌ 無法獲取第一頁評論，停止收集")
+                    break
+                else:
+                    print(f"🔄 第 {page} 頁失敗，但已收集 {len(comment_list)} 則評論")
+                    break
+            
+            # 嘗試解析 JSON 資料
             try:
-                next_token = data[1]
-            except IndexError:
-                print(f"Unexpected data structure: {data} {self.id} {page} {self.name}")
-                break
-            comment_list.extend(data[2])
+                data = json.loads(emoji.demojize(raw_text[4:]))
+            except (json.JSONDecodeError, IndexError) as e:
+                print(f"⚠️ JSON 解析失敗 - 餐廳: {self.name}, 頁數: {page}")
+                print(f"原始回應長度: {len(raw_text)}")
+                print(f"回應開頭: {raw_text[:200]}...")
+                if page == 1:
+                    print(f"❌ 第一頁解析失敗，可能此餐廳沒有評論或API格式變更")
+                    break
+                else:
+                    print(f"🔄 第 {page} 頁解析失敗，但已收集 {len(comment_list)} 則評論")
+                    break
+            
+            # 檢查資料結構
+            try:
+                next_token = data[1] if len(data) > 1 else None
+                current_comments = data[2] if len(data) > 2 else []
+            except (IndexError, TypeError):
+                print(f"⚠️ 資料結構異常 - 餐廳: {self.name}, 頁數: {page}")
+                print(f"資料類型: {type(data)}, 長度: {len(data) if isinstance(data, list) else 'N/A'}")
+                if page == 1:
+                    print(f"❌ 第一頁資料結構異常，可能此餐廳沒有評論")
+                    break
+                else:
+                    print(f"🔄 第 {page} 頁資料異常，但已收集 {len(comment_list)} 則評論")
+                    break
+            
+            # 添加評論到清單
+            if current_comments:
+                comment_list.extend(current_comments)
+                print(f"✅ 第 {page} 頁: 獲取 {len(current_comments)} 則評論，累計 {len(comment_list)} 則")
+            else:
+                print(f"🔄 第 {page} 頁: 沒有更多評論")
+            
             if not next_token:
-                #print(f"所有評論以抓取完成，總共抓取 {len(comment_list)} 則評論")
+                print(f"🎉 所有評論收集完成，總共 {len(comment_list)} 則評論")
                 break
             time.sleep(0.1)
 
@@ -202,6 +241,12 @@ class Restaurant:
         
         使用批次寫入方式，一次上傳所有評論
         '''
+        if not self.reviews:
+            print(f"⚠️ 餐廳 {self.name} 沒有評論資料，跳過評論上傳")
+            return
+        
+        print(f"📤 準備上傳 {len(self.reviews)} 則評論到 Firestore...")
+        
         try:
             url = f"https://firestore.googleapis.com/v1/projects/{project_id}/databases/(default)/documents:commit"
             writes = []

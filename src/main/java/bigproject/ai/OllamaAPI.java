@@ -10,6 +10,7 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -22,7 +23,9 @@ public class OllamaAPI {
     private static final String OLLAMA_API_URL = "http://localhost:11434/api/generate";
     private static final String DEFAULT_MODEL = "gemma3:4b";
     private static final ObjectMapper mapper = new ObjectMapper();
-    private static final HttpClient client = HttpClient.newHttpClient();
+    private static final HttpClient client = HttpClient.newBuilder()
+            .connectTimeout(java.time.Duration.ofSeconds(60))
+            .build();
     private static final ExecutorService executor = Executors.newFixedThreadPool(2);
     
     private static OllamaManager ollamaManager;
@@ -30,6 +33,23 @@ public class OllamaAPI {
     static {
         // 初始化OllamaManager
         ollamaManager = new OllamaManager();
+        
+        // 添加 JVM shutdown hook 確保在任何情況下都會清理資源
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            System.out.println("🔧 JVM Shutdown Hook: 開始清理 Ollama 資源...");
+            try {
+                if (ollamaManager != null) {
+                    ollamaManager.forceShutdown(); // 使用強制關閉
+                }
+                executor.shutdown();
+                if (!executor.awaitTermination(5, TimeUnit.SECONDS)) {
+                    executor.shutdownNow();
+                }
+                System.out.println("✅ JVM Shutdown Hook: Ollama 資源清理完成");
+            } catch (Exception e) {
+                System.err.println("⚠️ JVM Shutdown Hook: 清理資源時發生錯誤: " + e.getMessage());
+            }
+        }, "OllamaCleanupThread"));
     }
     
     /**

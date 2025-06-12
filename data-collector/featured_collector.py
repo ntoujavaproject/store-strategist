@@ -143,23 +143,39 @@ class FeaturedCollector:
                 reason.append(f"{review.star_rating}星高評分")
             
             # 檢查是否有照片
-            has_photo = review.photo_url and review.photo_url.strip()
+            photo_url = review.photo_url
+            if isinstance(photo_url, list):
+                photo_url = photo_url[0] if photo_url else None
+            has_photo = photo_url and str(photo_url).strip()
             if has_photo:
                 is_featured = True
                 reason.append("包含照片")
-                self.results['featured_photos'].append(review.photo_url)
+                self.results['featured_photos'].append(str(photo_url))
             
             # 檢查評論內容
-            has_content = review.comment and review.comment.strip()
+            comment = review.comment
+            if isinstance(comment, list):
+                comment = comment[0] if comment else None
+            has_content = comment and str(comment).strip()
             
             # 如果符合精選條件且有內容
             if is_featured and has_content:
+                # 處理可能是列表的 photo_url
+                review_photo_url = review.photo_url
+                if isinstance(review_photo_url, list):
+                    review_photo_url = review_photo_url[0] if review_photo_url else ""
+                
+                # 處理可能是列表的 comment
+                review_comment = review.comment
+                if isinstance(review_comment, list):
+                    review_comment = review_comment[0] if review_comment else ""
+                
                 featured_review = {
                     'reviewer_name': review.reviewer_name or "匿名用戶",
                     'reviewer_state': review.reviewer_state or "",
                     'star_rating': review.star_rating or 0,
-                    'comment': review.comment or "",
-                    'photo_url': review.photo_url or "",
+                    'comment': str(review_comment) if review_comment else "",
+                    'photo_url': str(review_photo_url) if review_photo_url else "",
                     'comment_date': review.comment_date or "",
                     'food_score': review.food_score or 0,
                     'service_score': review.service_score or 0,
@@ -281,13 +297,19 @@ class FeaturedReviewsCollector:
         score = 0.0
         
         # 評論長度評分
-        comment_length = len(review.comment or "")
+        comment = review.comment
+        if isinstance(comment, list):
+            comment = comment[0] if comment else ""
+        comment_length = len(str(comment) if comment else "")
         if comment_length > 0:
             length_score = min(comment_length / 200.0, 1.0)  # 200字以上視為滿分
             score += length_score * 0.4
         
         # 是否有照片
-        if review.photo_url:
+        photo_url = review.photo_url
+        if isinstance(photo_url, list):
+            photo_url = photo_url[0] if photo_url else None
+        if photo_url:
             score += 0.3
         
         # 是否有詳細評分（餐點、服務、氣氛）
