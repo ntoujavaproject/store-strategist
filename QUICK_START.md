@@ -3,10 +3,11 @@
 ## 📦 下載與安裝
 ### 🍎 **Mac 用戶**
 
-1. **下載** `RestaurantAnalyzer-v1.0.3.dmg`
-2. **雙擊** 掛載磁碟映像
-3. **拖拽** 應用程式到 Applications 資料夾
-4. **啟動** 從 Applications 或 Launchpad
+1. **前往** [GitHub Releases](https://github.com/ntoujavaproject/store-strategist/releases) 頁面
+2. **下載** 最新版本的 `RestaurantAnalyzer-v1.0.3.dmg`
+3. **雙擊** 掛載磁碟映像
+4. **拖拽** 應用程式到 Applications 資料夾
+5. **啟動** 從 Applications 或 Launchpad
 
 **⚠️ 系統需求：**
 - macOS 10.14 或更新版本
@@ -14,7 +15,7 @@
 
 ## 🎯 首次設定
 
-### AI 初始化（Windows 和 Mac）
+### AI 初始化（Mac）
 首次啟動應用程式時：
 
 1. **AI 狀態檢查** - 應用程式檢查 Ollama AI 安裝狀態
@@ -26,6 +27,7 @@
 - 確保網路連線穩定
 - 初始化期間請勿關閉應用程式
 - 下載僅需進行一次
+- AI 分析使用本地精選評論，提高效能
 
 ## 🔍 使用應用程式
 
@@ -76,15 +78,16 @@
 
 #### ❌ **「Java 錯誤訊息」**
 **解決方案：**
-- 使用零安裝版本（包含 Java Runtime）
-- 或手動安裝 Java 21+
+- 確保已安裝 Java 21+
 - 檢查 JAVA_HOME 環境變數
+- 從 Adoptium 下載最新版 Java
 
-#### ❌ **「Python 相關錯誤」**
+#### ❌ **「AI 分析速度慢」**
 **解決方案：**
-- 核心功能仍正常運作
-- 僅數據收集功能可能受限
-- 可忽略這些錯誤繼續使用
+- 首次使用需要下載 AI 模型
+- 系統會優先使用精選評論加速分析
+- 確保網路連線穩定
+- v1.0.3 版本已大幅優化分析速度
 
 #### ❌ **「數據收集失敗」**
 **解決方案：**
@@ -146,7 +149,7 @@
 ## 🔄 更新與維護
 
 ### 檢查更新
-- 應用程式會自動檢查更新
+- 定期訪問 [GitHub Releases](https://github.com/ntoujavaproject/store-strategist/releases) 檢查更新
 - 建議保持最新版本
 - 關注新功能發布
 - 參與測試版程式（可選）
@@ -161,4 +164,4 @@
 
 🎉 **歡迎使用餐廳分析器！讓 AI 智能驅動您的餐飲業務決策！** 🍽️
 
-有任何問題或建議，歡迎隨時聯絡我們的支援團隊。 
+有任何問題或建議，歡迎隨時透過 [GitHub Issues](https://github.com/ntoujavaproject/store-strategist/issues) 聯絡我們。 
