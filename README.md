@@ -35,6 +35,7 @@
 - **資料庫**：Firebase Firestore
 - **搜尋引擎**：Algolia
 - **檔案存儲**：Firebase Storage
+- **AI 引擎**：Ollama (本地運行)
 
 ## 📱 macOS 安裝
 
@@ -45,15 +46,13 @@
 - **硬碟空間**：至少 3GB 可用空間
 - **Java**：需要 Java 21 或更高版本
 
-### 安裝步驟
-1. **創建 DMG 檔案**
-   ```bash
-   # 編譯並創建 DMG
-   ./create_macos_dmg.sh
-   ```
+### 安裝方式 (使用者)
+1. **下載最新版本**
+   - 前往 [GitHub Releases](https://github.com/ntoujavaproject/store-strategist/releases) 頁面
+   - 下載最新版本的 `RestaurantAnalyzer-v1.0.3.dmg`
 
 2. **安裝應用程式**
-   - 雙擊 `RestaurantAnalyzer-Working.dmg` 開啟安裝檔
+   - 雙擊 DMG 檔案開啟安裝檔
    - 將應用程式拖拽到 `Applications` 資料夾
    - 在 Launchpad 或 Applications 資料夾中找到並啟動應用程式
 
@@ -104,13 +103,23 @@ A: 系統會自動嘗試從Google Maps收集資料，請確保餐廳名稱正確
 **Q: 評分顯示N/A？**
 A: 可能是評論收集失敗，系統會自動重試。
 
+**Q: AI 分析速度慢？**
+A: 首次使用時需要下載 AI 模型，後續使用會更快。系統會優先使用精選評論加速分析。
+
 ### 系統日誌
 - 應用程式運行日誌會顯示在控制台中
 - 如遇問題，請查看控制台輸出資訊
 
 ## 📜 版本歷史
 
-### v1.0.3 (2025)
+### v1.0.3 (2025-06-13)
+- 🚀 AI 分析效能大幅提升
+- ⚡️ 使用精選評論排序，優先分析高評分內容
+- 🔄 直接使用本地評論，不再從 Firestore 重新獲取
+- 🛠️ 改進錯誤處理和回退機制
+- 🧹 移除 Windows 安裝檔，專注於 macOS 平台
+
+### v1.0.0 (2025-05-30)
 - 🎉 初始版本發布
 - ✨ 智能餐廳搜尋和資料收集
 - 🔧 Google Maps評論爬取功能
